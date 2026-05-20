@@ -1,0 +1,43 @@
+/* ✅ Tailwind (for Auth UI) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================= GLOBAL RESET ================= */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ================= BODY ================= */
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7ff 0%, #e0e7ff 100%);
+  color: #000;
+}
+
+/* ================= LINKS ================= */
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: none;
+}
+a:hover {
+  color: #535bf2;
+}
+
+/* ================= HEADINGS ================= */
+h1 {
+  font-size: 2.5rem;
+  line-height: 1.2;
+}
+
+/* ================= AUTH BOX ================= */
+.auth-container {
+  background: white;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  padding: 20px;
+}
