@@ -88,6 +88,15 @@ export default function PPMSDashboard({ isAdmin = false }) {
   const [isRackEditMode, setIsRackEditMode] = useState(false);
   const [rackForm, setRackForm] = useState({ id: null, name: "", price: "" });
 
+  /* ===============================================================
+     EDIT PICKER STATE
+     editPicker = { type: "processor"|"memory"|"gpu"|"interconnect"|
+                    "kvm"|"pfs"|"secondary"|"mgmt"|"ocp"|"rack" }
+     editPickerSelected = the item chosen in the picker list
+  =============================================================== */
+  const [editPicker, setEditPicker] = useState(null);          // which picker panel to show
+  const [editPickerSelected, setEditPickerSelected] = useState(null); // item highlighted in picker
+
   /* ================= DATABASE DROPDOWN DATA ================= */
   const [processors, setProcessors] = useState([]);
   const [memoryList, setMemoryList] = useState([]);
@@ -149,24 +158,36 @@ export default function PPMSDashboard({ isAdmin = false }) {
         {
           name: "KVM Switch", options: kvm || [], apiKey: "kvm",
           getHover: (o) => `Spec: ${o.specification}\nPorts: ${o.ports}\nForm Factor: ${o.formFactor}`,
+          pickerType: "kvm",
+          getLabel: (o) => o.name,
         },
         {
           name: "PFS Storage", options: pfs || [], apiKey: "pfs",
-          getHover: (o) => `Capacity: ${o.total_capacity_pb} PB\n Software Model: ${o.software_model}\n Manufacturer: ${o.manufacturer} \n Software Model:${o.software_model}`,
+          getHover: (o) => `Capacity: ${o.total_capacity_pb} PB\nSoftware Model: ${o.software_model}\nManufacturer: ${o.manufacturer}`,
+          pickerType: "pfs",
+          getLabel: (o) => o.name,
         },
         {
           name: "Secondary Interconnect", options: secondary || [], apiKey: "secondary-interconnect",
-          getHover: (o) => `Vendor: ${o.vendor}\n product_name: ${o.product_name}\n Speed: ${o.port_speed_gbps}Gbps\n Ports: ${o.number_of_ports}\n technology: ${o.technology} `,
+          getHover: (o) => `Vendor: ${o.vendor}\nProduct: ${o.product_name}\nSpeed: ${o.port_speed_gbps}Gbps\nPorts: ${o.number_of_ports}\nTech: ${o.technology}`,
+          pickerType: "secondary",
+          getLabel: (o) => o.product_name,
         },
         {
           name: "Management Network", options: management || [], apiKey: "management-network",
-          getHover: (o) => `Vendor: ${o.vendor}\n Product Name: ${o.product_name}\n Tech: ${o.technology}\n Speed: ${o.port_speed_gbps}Gbps\n No. of Ports: ${o.number_of_ports}`,
+          getHover: (o) => `Vendor: ${o.vendor}\nProduct: ${o.product_name}\nTech: ${o.technology}\nSpeed: ${o.port_speed_gbps}Gbps\nPorts: ${o.number_of_ports}`,
+          pickerType: "mgmt",
+          getLabel: (o) => o.product_name,
         },
         {
           name: "OCP Rack", options: ocp || [], apiKey: "ocp-rack", getHover: null,
+          pickerType: "ocp",
+          getLabel: (o) => o.name,
         },
         {
           name: "Standard Rack", options: rack || [], apiKey: "standard-rack", getHover: null,
+          pickerType: "rack",
+          getLabel: (o) => o.name,
         },
       ]);
 
@@ -277,21 +298,153 @@ export default function PPMSDashboard({ isAdmin = false }) {
     }
   };
 
-  /* ================= GENERIC DELETE HELPER ================= */
-  const handleDelete = async (apiKey, id, label) => {
-    if (!window.confirm(`Delete this ${label}?`)) return;
+  /* ================= DELETE FROM PICKER ================= */
+  const pickerApiKeyMap = {
+    processor: "processor", memory: "memory", gpu: "gpu",
+    interconnect: "interconnect", kvm: "kvm", pfs: "pfs",
+    secondary: "secondary-interconnect", mgmt: "management-network",
+    ocp: "ocp-rack", rack: "standard-rack",
+  };
+
+  const handlePickerDelete = async () => {
+    if (!editPickerSelected) { alert("Please select an item to delete"); return; }
+    const item = editPickerSelected;
+    const apiKey = pickerApiKeyMap[editPicker];
+    const label = item.model || item.name || item.product_name || item.memory_type || "this item";
+    const confirmed = window.confirm(`Do you want to Delete "${label}"?\n`);
+    if (!confirmed) return;
     try {
-      await axios.delete(`${BASE_URL}/${apiKey}/${id}`);
-      alert(`${label} deleted successfully`);
+      await axios.delete(`${BASE_URL}/${apiKey}/${item.id}`);
+      alert(`"${label}" deleted successfully`);
+      closeEditPicker();
       fetchData();
     } catch (err) {
       console.error(err);
-      alert(`Error deleting ${label}`);
+      alert(`Error deleting "${label}". It may be in use.`);
     }
+  };
+
+  /* =================================================================
+     EDIT PICKER OPENER
+     Called when admin clicks Edit in the node config panel or Table A.
+     Opens a selection panel listing all items of that type from DB.
+  ================================================================= */
+  const openEditPicker = (type) => {
+    setEditPickerSelected(null);
+    setEditPicker(type);
+  };
+
+  const closeEditPicker = () => {
+    setEditPicker(null);
+    setEditPickerSelected(null);
+  };
+
+  /* After admin selects an item from the picker and clicks "Edit Selected",
+     pre-fill the correct form and open it in edit mode. */
+  const handlePickerConfirm = () => {
+    if (!editPickerSelected) { alert("Please select an item to edit"); return; }
+    const item = editPickerSelected;
+
+    if (editPicker === "processor") {
+      setProcessorForm({
+        id: item.id, manufacturer: item.manufacturer || "", model: item.model || "",
+        architecture: item.architecture || "", cpus_per_node: item.cpus_per_node || "",
+        cores_per_cpu: item.cores_per_cpu || "", total_cores: item.total_cores || "",
+        base_ghz: item.base_ghz || "", l3Cache: item.l3Cache || "",
+        memoryType: item.memoryType || "", pcie_gen: item.pcie_gen || "",
+        tdp_watt: item.tdp_watt || "", price: item.price || "",
+        rpeak: item.rpeak || "", FLOPSPerCycle: item.FLOPSPerCycle || "",
+      });
+      setIsEditMode(true);
+      setShowProcessorForm(true);
+    } else if (editPicker === "memory") {
+      setMemoryForm({
+        id: item.id, memory_type: item.memory_type || "",
+        component_category: item.component_category || "",
+        module_capacity_gb: item.module_capacity_gb || "",
+        memory_speed_mts: item.memory_speed_mts || "",
+        memory_channels: item.memory_channels || "",
+        dimms_per_channel: item.dimms_per_channel || "",
+        total_memory_per_node_gb: item.total_memory_per_node_gb || "",
+        price: item.price || "",
+      });
+      setIsMemoryEditMode(true);
+      setShowMemoryForm(true);
+    } else if (editPicker === "gpu") {
+      setGpuForm({
+        id: item.id, name: item.name || "", component_category: item.component_category || "",
+        architecture: item.architecture || "", gpusPerNode: item.gpusPerNode || "",
+        fp64: item.fp64 || "", gpuMemory: item.gpuMemory || "",
+        interconnect: item.interconnect || "", rpeak: item.rpeak || "",
+        manufacturer: item.manufacturer || "", price: item.price || "",
+      });
+      setIsGpuEditMode(true);
+      setShowGpuForm(true);
+    } else if (editPicker === "interconnect") {
+      setInterconnectForm({
+        id: item.id, product_name: item.product_name || "",
+        component_category: item.component_category || "",
+        technology: item.technology || "", port_speed_gbps: item.port_speed_gbps || "",
+        number_of_ports: item.number_of_ports || "",
+        aggregate_bandwidth_tbps: item.aggregate_bandwidth_tbps || "",
+        latency_ns: item.latency_ns || "", vendor: item.vendor || "",
+        price: item.price || "",
+      });
+      setIsInterconnectEditMode(true);
+      setShowInterconnectForm(true);
+    } else if (editPicker === "kvm") {
+      setKvmForm({
+        id: item.id, name: item.name || "", specification: item.specification || "",
+        ports: item.ports || "", formFactor: item.formFactor || "", price: item.price || "",
+      });
+      setIsKvmEditMode(true);
+      setShowKvmForm(true);
+    } else if (editPicker === "pfs") {
+      setPfsForm({
+        id: item.id, name: item.name || "", total_capacity_pb: item.total_capacity_pb || "",
+        manufacturer: item.manufacturer || "", software_model: item.software_model || "",
+        price: item.price || "",
+      });
+      setIsPfsEditMode(true);
+      setShowPfsForm(true);
+    } else if (editPicker === "secondary") {
+      setSecondaryForm({
+        id: item.id, component_category: item.component_category || "",
+        vendor: item.vendor || "", product_name: item.product_name || "",
+        technology: item.technology || "", port_speed_gbps: item.port_speed_gbps || "",
+        number_of_ports: item.number_of_ports || "", typical_use: item.typical_use || "",
+        price: item.price || "",
+      });
+      setIsSecondaryEditMode(true);
+      setShowSecondaryForm(true);
+    } else if (editPicker === "mgmt") {
+      setMgmtForm({
+        id: item.id, component_category: item.component_category || "",
+        vendor: item.vendor || "", technology: item.technology || "",
+        product_name: item.product_name || "", port_speed_gbps: item.port_speed_gbps || "",
+        number_of_ports: item.number_of_ports || "", use: item.use || "",
+        price: item.price || "",
+      });
+      setIsMgmtEditMode(true);
+      setShowMgmtForm(true);
+    } else if (editPicker === "ocp") {
+      setOcpForm({ id: item.id, name: item.name || "", price: item.price || "" });
+      setIsOcpEditMode(true);
+      setShowOcpForm(true);
+    } else if (editPicker === "rack") {
+      setRackForm({ id: item.id, name: item.name || "", price: item.price || "" });
+      setIsRackEditMode(true);
+      setShowRackForm(true);
+    }
+    closeEditPicker();
   };
 
   /* ================= PROCESSOR CRUD ================= */
   const saveProcessor = async () => {
+    const { manufacturer, model, architecture, cpus_per_node, cores_per_cpu, total_cores, base_ghz, l3Cache, memoryType, pcie_gen, tdp_watt, price, rpeak, FLOPSPerCycle } = processorForm;
+    if (!manufacturer || !model || !architecture || !cpus_per_node || !cores_per_cpu || !total_cores || !base_ghz || !l3Cache || !memoryType || !pcie_gen || !tdp_watt || !price || !rpeak || !FLOPSPerCycle) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isEditMode) {
         await axios.put(`${BASE_URL}/processor/${processorForm.id}`, processorForm);
@@ -310,6 +463,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= MEMORY CRUD ================= */
   const saveMemory = async () => {
+    const { memory_type, module_capacity_gb, memory_speed_mts, memory_channels, total_memory_per_node_gb, price } = memoryForm;
+    if (!memory_type || !module_capacity_gb || !memory_speed_mts || !memory_channels || !total_memory_per_node_gb || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isMemoryEditMode) {
         await axios.put(`${BASE_URL}/memory/${memoryForm.id}`, memoryForm);
@@ -328,6 +485,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= GPU CRUD ================= */
   const saveGpu = async () => {
+    const { name, component_category, architecture, gpusPerNode, fp64, gpuMemory, interconnect, rpeak, manufacturer, price } = gpuForm;
+    if (!name || !component_category || !architecture || !gpusPerNode || !fp64 || !gpuMemory || !interconnect || !rpeak || !manufacturer || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isGpuEditMode) {
         await axios.put(`${BASE_URL}/gpu/${gpuForm.id}`, gpuForm);
@@ -346,6 +507,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= INTERCONNECT CRUD ================= */
   const saveInterconnect = async () => {
+    const { product_name, technology, port_speed_gbps, number_of_ports, aggregate_bandwidth_tbps, latency_ns, vendor, price } = interconnectForm;
+    if (!product_name || !technology || !port_speed_gbps || !number_of_ports || !aggregate_bandwidth_tbps || !latency_ns || !vendor || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isInterconnectEditMode) {
         await axios.put(`${BASE_URL}/interconnect/${interconnectForm.id}`, interconnectForm);
@@ -364,6 +529,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= KVM SWITCH CRUD ================= */
   const saveKvm = async () => {
+    const { name, specification, ports, formFactor, price } = kvmForm;
+    if (!name || !specification || !ports || !formFactor || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isKvmEditMode) {
         await axios.put(`${BASE_URL}/kvm/${kvmForm.id}`, kvmForm);
@@ -382,6 +551,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= PFS STORAGE CRUD ================= */
   const savePfs = async () => {
+    const { name, total_capacity_pb, manufacturer, software_model, price } = pfsForm;
+    if (!name || !total_capacity_pb || !manufacturer || !software_model || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isPfsEditMode) {
         await axios.put(`${BASE_URL}/pfs/${pfsForm.id}`, pfsForm);
@@ -400,6 +573,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= SECONDARY INTERCONNECT CRUD ================= */
   const saveSecondary = async () => {
+    const { component_category, vendor, product_name, technology, port_speed_gbps, number_of_ports, typical_use, price } = secondaryForm;
+    if (!component_category || !vendor || !product_name || !technology || !port_speed_gbps || !number_of_ports || !typical_use || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isSecondaryEditMode) {
         await axios.put(`${BASE_URL}/secondary-interconnect/${secondaryForm.id}`, secondaryForm);
@@ -418,6 +595,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= MANAGEMENT NETWORK CRUD ================= */
   const saveMgmt = async () => {
+    const { component_category, vendor, technology, product_name, port_speed_gbps, number_of_ports, price } = mgmtForm;
+    if (!component_category || !vendor || !technology || !product_name || !port_speed_gbps || !number_of_ports || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isMgmtEditMode) {
         await axios.put(`${BASE_URL}/management-network/${mgmtForm.id}`, mgmtForm);
@@ -436,6 +617,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= OCP RACK CRUD ================= */
   const saveOcp = async () => {
+    const { name, price } = ocpForm;
+    if (!name || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isOcpEditMode) {
         await axios.put(`${BASE_URL}/ocp-rack/${ocpForm.id}`, ocpForm);
@@ -454,6 +639,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= STANDARD RACK CRUD ================= */
   const saveRack = async () => {
+    const { name, price } = rackForm;
+    if (!name || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
     try {
       if (isRackEditMode) {
         await axios.put(`${BASE_URL}/standard-rack/${rackForm.id}`, rackForm);
@@ -470,17 +659,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
     setIsRackEditMode(false);
   };
 
-  /* ================= HELPER: open edit form for simple component ================= */
-  const openEditForm = (compName, selectedOption) => {
-    if (!selectedOption) { alert(`Select a ${compName} first`); return; }
-    if (compName === "KVM Switch") { setKvmForm({ id: selectedOption.id, name: selectedOption.name || "", specification: selectedOption.specification || "", ports: selectedOption.ports || "", formFactor: selectedOption.formFactor || "", price: selectedOption.price || "" }); setIsKvmEditMode(true); setShowKvmForm(true); }
-    else if (compName === "PFS Storage") { setPfsForm({ id: selectedOption.id, name: selectedOption.name || "", total_capacity_pb: selectedOption.total_capacity_pb || "", manufacturer: selectedOption.manufacturer || "", software_model: selectedOption.software_model || "", price: selectedOption.price || "" }); setIsPfsEditMode(true); setShowPfsForm(true); }
-    else if (compName === "Secondary Interconnect") { setSecondaryForm({ id: selectedOption.id, component_category: selectedOption.component_category || "", vendor: selectedOption.vendor || "", product_name: selectedOption.product_name || "", technology: selectedOption.technology || "", port_speed_gbps: selectedOption.port_speed_gbps || "", number_of_ports: selectedOption.number_of_ports || "", typical_use: selectedOption.typical_use || "", price: selectedOption.price || "" }); setIsSecondaryEditMode(true); setShowSecondaryForm(true); }
-    else if (compName === "Management Network") { setMgmtForm({ id: selectedOption.id, component_category: selectedOption.component_category || "", vendor: selectedOption.vendor || "", technology: selectedOption.technology || "", product_name: selectedOption.product_name || "", port_speed_gbps: selectedOption.port_speed_gbps || "", number_of_ports: selectedOption.number_of_ports || "", use: selectedOption.use || "", price: selectedOption.price || "" }); setIsMgmtEditMode(true); setShowMgmtForm(true); }
-    else if (compName === "OCP Rack") { setOcpForm({ id: selectedOption.id, name: selectedOption.name || "", price: selectedOption.price || "" }); setIsOcpEditMode(true); setShowOcpForm(true); }
-    else if (compName === "Standard Rack") { setRackForm({ id: selectedOption.id, name: selectedOption.name || "", price: selectedOption.price || "" }); setIsRackEditMode(true); setShowRackForm(true); }
-  };
-
+  /* ================= HELPER: open add form for simple component ================= */
   const openAddForm = (compName) => {
     if (compName === "KVM Switch") { resetKvmForm(); setShowKvmForm(true); }
     else if (compName === "PFS Storage") { resetPfsForm(); setShowPfsForm(true); }
@@ -488,11 +667,6 @@ export default function PPMSDashboard({ isAdmin = false }) {
     else if (compName === "Management Network") { resetMgmtForm(); setShowMgmtForm(true); }
     else if (compName === "OCP Rack") { resetOcpForm(); setShowOcpForm(true); }
     else if (compName === "Standard Rack") { resetRackForm(); setShowRackForm(true); }
-  };
-
-  const getApiKey = (compName) => {
-    const map = { "KVM Switch": "kvm", "PFS Storage": "pfs", "Secondary Interconnect": "secondary-interconnect", "Management Network": "management-network", "OCP Rack": "ocp-rack", "Standard Rack": "standard-rack" };
-    return map[compName];
   };
 
   /* ================= PDF GENERATION ================= */
@@ -553,6 +727,97 @@ export default function PPMSDashboard({ isAdmin = false }) {
     </div>
   );
 
+  /* =================================================================
+     EDIT PICKER MODAL
+     Shows a list of all items of the given type.
+     Admin clicks one to highlight it, then clicks "Edit Selected".
+  ================================================================= */
+  const EditPickerModal = ({ type, title, items, getLabel, getSubLabel }) => (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: "500px" }}>
+        <h2>Select {title}</h2>
+        <p style={{ color: "#666", fontSize: "13px", marginBottom: "12px" }}>
+          Click an item to select it, then choose an action below.
+        </p>
+        <div style={{ maxHeight: "350px", overflowY: "auto", border: "1px solid #ddd", borderRadius: "6px" }}>
+          {items.length === 0 ? (
+            <div style={{ padding: "20px", textAlign: "center", color: "#999" }}>No items found in database.</div>
+          ) : (
+            items.map((item, idx) => {
+              const isSelected = editPickerSelected?.id === item.id;
+              return (
+                <div
+                  key={idx}
+                  onClick={() => setEditPickerSelected(item)}
+                  style={{
+                    padding: "12px 16px",
+                    cursor: "pointer",
+                    borderBottom: "1px solid #eee",
+                    background: isSelected ? "#e3f2fd" : idx % 2 === 0 ? "#fafafa" : "#fff",
+                    borderLeft: isSelected ? "4px solid #1976d2" : "4px solid transparent",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <div style={{ fontWeight: isSelected ? "bold" : "normal", color: isSelected ? "#1976d2" : "#333" }}>
+                    {getLabel(item)}
+                  </div>
+                  {getSubLabel && (
+                    <div style={{ fontSize: "12px", color: "#888", marginTop: "3px" }}>
+                      {getSubLabel(item)}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Divider */}
+        <div style={{ borderTop: "1px solid #e0e0e0", marginTop: "16px", paddingTop: "14px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          {/* Edit Selected */}
+          <button
+            onClick={handlePickerConfirm}
+            disabled={!editPickerSelected}
+            style={{
+              background: editPickerSelected ? "#1976d2" : "#477bca",
+              color: "white", border: "none", padding: "10px 18px",
+              borderRadius: "5px", cursor: editPickerSelected ? "pointer" : "not-allowed",
+              fontWeight: "600",
+            }}
+          >
+            ✏️ Edit Selected
+          </button>
+
+          {/* Delete Selected */}
+          <button
+            onClick={handlePickerDelete}
+            disabled={!editPickerSelected}
+            style={{
+              background: editPickerSelected ? "#d32f2f" : "#be5151",
+              color: "white", border: "none", padding: "10px 18px",
+              borderRadius: "5px", cursor: editPickerSelected ? "pointer" : "not-allowed",
+              fontWeight: "600",
+            }}
+          >
+            🗑️ Delete Selected
+          </button>
+
+          {/* Cancel */}
+          <button
+            onClick={closeEditPicker}
+            style={{
+              background: "#4f8ce7", color: "#fdfeff", border: "1px solid #020913",
+              padding: "10px 18px", borderRadius: "5px", cursor: "pointer",
+              fontWeight: "600", marginLeft: "auto",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   /* ================= ADMIN BUTTON STYLES ================= */
   const btnStyle = (color) => ({
     background: color, color: "white", border: "none",
@@ -589,6 +854,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
                   {nodes[key].configured ? "Edit" : "Configure"}
                 </button>
               </td>
+              {isAdmin && <td>-</td>}
             </tr>
           ))}
 
@@ -634,21 +900,8 @@ export default function PPMSDashboard({ isAdmin = false }) {
                 <td>-</td>
                 {isAdmin && (
                   <td>
-                    {/* ADD */}
                     <button style={btnStyle("green")} onClick={() => openAddForm(comp.name)}>Add</button>
-                    {/* EDIT */}
-                    <button style={btnStyle("orange")} onClick={() => openEditForm(comp.name, simpleState[i]?.selected)}>Edit</button>
-                    {/* DELETE */}
-                    <button
-                      style={btnStyle("red")}
-                      onClick={() => {
-                        const sel = simpleState[i]?.selected;
-                        if (!sel) { alert(`Select a ${comp.name} first`); return; }
-                        handleDelete(getApiKey(comp.name), sel.id, comp.name);
-                      }}
-                    >
-                      Delete
-                    </button>
+                    <button style={btnStyle("orange")} onClick={() => openEditPicker(comp.pickerType)}>Edit</button>
                   </td>
                 )}
               </tr>
@@ -667,14 +920,22 @@ export default function PPMSDashboard({ isAdmin = false }) {
             {/* PROCESSOR */}
             <label>Processor:</label>
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <select value={processors.findIndex((p) => p.model === nodes[activeNode].processor?.model)} onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], processor: processors[e.target.value] } })} style={{ flex: 1 }}>
+              <select
+                value={processors.findIndex((p) => p.model === nodes[activeNode].processor?.model)}
+                onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], processor: processors[e.target.value] } })}
+                style={{ flex: 1 }}
+              >
                 <option value="-1">Select Processor</option>
-                {processors.map((p, i) => (<option key={i} value={i} title={`Model: ${p.model}\nBase GHz: ${p.base_ghz}\nCPUs Per Node: ${p.cpus_per_node}\n Architecture: ${p.architecture}\n rpeak: ${p.rpeak}\n FLOPSPerCycle: ${p.FLOPSPerCycle}\n Cores Per CPU: ${p.cores_per_cpu}`}>{p.model}</option>))}
+                {processors.map((p, i) => (
+                  <option key={i} value={i} title={`Model: ${p.model}\nBase GHz: ${p.base_ghz}\nCPUs Per Node: ${p.cpus_per_node}\nArchitecture: ${p.architecture}\nrpeak: ${p.rpeak}\nFLOPSPerCycle: ${p.FLOPSPerCycle}\nCores Per CPU: ${p.cores_per_cpu}`}>
+                    {p.model}
+                  </option>
+                ))}
               </select>
               {isAdmin && (
                 <>
                   <button style={btnStyle("green")} onClick={() => { resetProcessorForm(); setIsEditMode(false); setShowProcessorForm(true); }}>Add</button>
-                  <button style={btnStyle("orange")} onClick={() => { if (!nodes[activeNode].processor) { alert("Select Processor First"); return; } setProcessorForm(nodes[activeNode].processor); setIsEditMode(true); setShowProcessorForm(true); }}>Edit</button>
+                  <button style={btnStyle("orange")} onClick={() => openEditPicker("processor")}>Edit</button>
                 </>
               )}
             </div>
@@ -682,27 +943,22 @@ export default function PPMSDashboard({ isAdmin = false }) {
             {/* MEMORY */}
             <label>Memory:</label>
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <select value={memoryList.findIndex((m) => m.memory_type === nodes[activeNode].memory?.memory_type)} onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], memory: memoryList[e.target.value] } })} style={{ flex: 1 }}>
+              <select
+                value={memoryList.findIndex((m) => m.memory_type === nodes[activeNode].memory?.memory_type)}
+                onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], memory: memoryList[e.target.value] } })}
+                style={{ flex: 1 }}
+              >
                 <option value="-1">Select Memory</option>
                 {memoryList.map((m, i) => (
-                            <option
-                              key={i}
-                              value={i}
-                              title={`Memory Type: ${m.memory_type}
-                              Category: ${m.component_category}
-                              Module Capacity: ${m.module_capacity_gb} GB
-                              Memory Speed: ${m.memory_speed_mts} MT/s
-                              Memory Channels: ${m.memory_channels}                         
-                              Total Memory Per Node: ${m.total_memory_per_node_gb} GB`}
-                            >
-                              {m.memory_type} ({m.total_memory_per_node_gb}GB/Node)
-                            </option>
-                          ))}
+                  <option key={i} value={i} title={`Memory Type: ${m.memory_type}\nModule Capacity: ${m.module_capacity_gb} GB\nMemory Speed: ${m.memory_speed_mts} MT/s\nMemory Channels: ${m.memory_channels}\nTotal Memory Per Node: ${m.total_memory_per_node_gb} GB`}>
+                    {m.memory_type} ({m.total_memory_per_node_gb}GB/Node)
+                  </option>
+                ))}
               </select>
               {isAdmin && (
                 <>
                   <button style={btnStyle("green")} onClick={() => { resetMemoryForm(); setIsMemoryEditMode(false); setShowMemoryForm(true); }}>Add</button>
-                  <button style={btnStyle("orange")} onClick={() => { if (!nodes[activeNode].memory) { alert("Select Memory First"); return; } setMemoryForm(nodes[activeNode].memory); setIsMemoryEditMode(true); setShowMemoryForm(true); }}>Edit</button>
+                  <button style={btnStyle("orange")} onClick={() => openEditPicker("memory")}>Edit</button>
                 </>
               )}
             </div>
@@ -710,28 +966,22 @@ export default function PPMSDashboard({ isAdmin = false }) {
             {/* INTERCONNECT */}
             <label>Interconnect:</label>
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <select value={interconnects.findIndex((inter) => inter.product_name === nodes[activeNode].interconnect?.product_name)} onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], interconnect: interconnects[e.target.value] } })} style={{ flex: 1 }}>
+              <select
+                value={interconnects.findIndex((inter) => inter.product_name === nodes[activeNode].interconnect?.product_name)}
+                onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], interconnect: interconnects[e.target.value] } })}
+                style={{ flex: 1 }}
+              >
                 <option value="-1">Select Interconnect</option>
                 {interconnects.map((inter, idx) => (
-                      <option
-                        key={idx}
-                        value={idx}
-                        title={`Product: ${inter.product_name}
-                    Technology: ${inter.technology}
-                    Port Speed: ${inter.port_speed_gbps} Gbps
-                    Ports: ${inter.number_of_ports}
-                    Aggregate Bandwidth: ${inter.aggregate_bandwidth_tbps} Tbps
-                    Latency: ${inter.latency_ns} ns
-                    Vendor: ${inter.vendor}`}
-                      >
-                        {inter.product_name}
-                      </option>
-                    ))}
+                  <option key={idx} value={idx} title={`Product: ${inter.product_name}\nTechnology: ${inter.technology}\nPort Speed: ${inter.port_speed_gbps} Gbps\nPorts: ${inter.number_of_ports}\nAggregate BW: ${inter.aggregate_bandwidth_tbps} Tbps\nLatency: ${inter.latency_ns} ns\nVendor: ${inter.vendor}`}>
+                    {inter.product_name}
+                  </option>
+                ))}
               </select>
               {isAdmin && (
                 <>
                   <button style={btnStyle("green")} onClick={() => { resetInterconnectForm(); setIsInterconnectEditMode(false); setShowInterconnectForm(true); }}>Add</button>
-                  <button style={btnStyle("orange")} onClick={() => { if (!nodes[activeNode].interconnect) { alert("Select Interconnect First"); return; } setInterconnectForm(nodes[activeNode].interconnect); setIsInterconnectEditMode(true); setShowInterconnectForm(true); }}>Edit</button>
+                  <button style={btnStyle("orange")} onClick={() => openEditPicker("interconnect")}>Edit</button>
                 </>
               )}
             </div>
@@ -741,29 +991,22 @@ export default function PPMSDashboard({ isAdmin = false }) {
               <>
                 <label>GPU:</label>
                 <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                  <select value={gpuOptions.findIndex((g) => g.name === nodes[activeNode].gpu?.name)} onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], gpu: gpuOptions[e.target.value] } })} style={{ flex: 1 }}>
+                  <select
+                    value={gpuOptions.findIndex((g) => g.name === nodes[activeNode].gpu?.name)}
+                    onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], gpu: gpuOptions[e.target.value] } })}
+                    style={{ flex: 1 }}
+                  >
                     <option value="-1">Select GPU</option>
                     {gpuOptions.map((g, idx) => (
-                          <option
-                            key={idx}
-                            value={idx}
-                            title={`GPU: ${g.name || g.model}
-                        Architecture: ${g.architecture}
-                        GPUs Per Node: ${g.gpusPerNode}
-                        FP64 Performance: ${g.fp64}
-                        GPU Memory: ${g.gpuMemory}
-                        Interconnect: ${g.interconnect}
-                        RPeak: ${g.rpeak}
-                        Manufacturer: ${g.manufacturer}`}
-                          >
-                            {g.name || g.model}
-                          </option>
-                        ))}
+                      <option key={idx} value={idx} title={`GPU: ${g.name}\nArchitecture: ${g.architecture}\nGPUs Per Node: ${g.gpusPerNode}\nFP64: ${g.fp64}\nGPU Memory: ${g.gpuMemory}\nInterconnect: ${g.interconnect}\nRPeak: ${g.rpeak}\nManufacturer: ${g.manufacturer}`}>
+                        {g.name || g.model}
+                      </option>
+                    ))}
                   </select>
                   {isAdmin && (
                     <>
                       <button style={btnStyle("green")} onClick={() => { resetGpuForm(); setIsGpuEditMode(false); setShowGpuForm(true); }}>Add</button>
-                      <button style={btnStyle("orange")} onClick={() => { if (!nodes[activeNode].gpu) { alert("Select GPU First"); return; } setGpuForm(nodes[activeNode].gpu); setIsGpuEditMode(true); setShowGpuForm(true); }}>Edit</button>
+                      <button style={btnStyle("orange")} onClick={() => openEditPicker("gpu")}>Edit</button>
                     </>
                   )}
                 </div>
@@ -778,11 +1021,96 @@ export default function PPMSDashboard({ isAdmin = false }) {
         </div>
       )}
 
+      {/* ================================================================
+          EDIT PICKER MODALS — one per component type
+          Only one shows at a time based on editPicker state
+      ================================================================ */}
+      {editPicker === "processor" && (
+        <EditPickerModal
+          type="processor" title="Processor"
+          items={processors}
+          getLabel={(p) => p.model}
+          getSubLabel={(p) => `${p.manufacturer} | ${p.architecture} | ${p.cores_per_cpu} cores | ₹${Number(p.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {editPicker === "memory" && (
+        <EditPickerModal
+          type="memory" title="Memory"
+          items={memoryList}
+          getLabel={(m) => `${m.memory_type} (${m.total_memory_per_node_gb} GB/Node)`}
+          getSubLabel={(m) => `${m.memory_speed_mts} MT/s | ${m.memory_channels} channels | ₹${Number(m.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {editPicker === "gpu" && (
+        <EditPickerModal
+          type="gpu" title="GPU"
+          items={gpuOptions}
+          getLabel={(g) => g.name || g.model}
+          getSubLabel={(g) => `${g.manufacturer} | ${g.architecture} | FP64: ${g.fp64} | ₹${Number(g.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {editPicker === "interconnect" && (
+        <EditPickerModal
+          type="interconnect" title="Interconnect"
+          items={interconnects}
+          getLabel={(i) => i.product_name}
+          getSubLabel={(i) => `${i.vendor} | ${i.technology} | ${i.port_speed_gbps} Gbps | ₹${Number(i.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {editPicker === "kvm" && (
+        <EditPickerModal
+          type="kvm" title="KVM Switch"
+          items={simpleDropdownComponents.find(c => c.pickerType === "kvm")?.options || []}
+          getLabel={(k) => k.name}
+          getSubLabel={(k) => `${k.specification} | ${k.ports} ports | ${k.formFactor} | ₹${Number(k.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {editPicker === "pfs" && (
+        <EditPickerModal
+          type="pfs" title="PFS Storage"
+          items={simpleDropdownComponents.find(c => c.pickerType === "pfs")?.options || []}
+          getLabel={(p) => p.name}
+          getSubLabel={(p) => `${p.manufacturer} | ${p.total_capacity_pb} PB | ${p.software_model} | ₹${Number(p.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {editPicker === "secondary" && (
+        <EditPickerModal
+          type="secondary" title="Secondary Interconnect"
+          items={simpleDropdownComponents.find(c => c.pickerType === "secondary")?.options || []}
+          getLabel={(s) => s.product_name}
+          getSubLabel={(s) => `${s.vendor} | ${s.technology} | ${s.port_speed_gbps} Gbps | ₹${Number(s.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {editPicker === "mgmt" && (
+        <EditPickerModal
+          type="mgmt" title="Management Network"
+          items={simpleDropdownComponents.find(c => c.pickerType === "mgmt")?.options || []}
+          getLabel={(m) => m.product_name}
+          getSubLabel={(m) => `${m.vendor} | ${m.technology} | ${m.port_speed_gbps} Gbps | ₹${Number(m.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {editPicker === "ocp" && (
+        <EditPickerModal
+          type="ocp" title="OCP Rack"
+          items={simpleDropdownComponents.find(c => c.pickerType === "ocp")?.options || []}
+          getLabel={(o) => o.name}
+          getSubLabel={(o) => `₹${Number(o.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {editPicker === "rack" && (
+        <EditPickerModal
+          type="rack" title="Standard Rack"
+          items={simpleDropdownComponents.find(c => c.pickerType === "rack")?.options || []}
+          getLabel={(r) => r.name}
+          getSubLabel={(r) => `₹${Number(r.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+
       {/* ========================================================= */}
       {/* ================= PROCESSOR FORM ======================== */}
       {/* ========================================================= */}
       {showProcessorForm && (
-        <Modal title={isEditMode ? "Edit Processor" : "Add Processor"} onSave={saveProcessor} onCancel={() => setShowProcessorForm(false)}>
+        <Modal title={isEditMode ? "Edit Processor" : "Add Processor"} onSave={saveProcessor} onCancel={() => { setShowProcessorForm(false); resetProcessorForm(); }}>
           <input placeholder="Manufacturer" value={processorForm.manufacturer} onChange={(e) => setProcessorForm({ ...processorForm, manufacturer: e.target.value })} />
           <input placeholder="Model" value={processorForm.model} onChange={(e) => setProcessorForm({ ...processorForm, model: e.target.value })} />
           <input placeholder="Architecture" value={processorForm.architecture} onChange={(e) => setProcessorForm({ ...processorForm, architecture: e.target.value })} />
@@ -803,13 +1131,11 @@ export default function PPMSDashboard({ isAdmin = false }) {
       {/* ================= MEMORY FORM ================= */}
       {showMemoryForm && (
         <Modal title={isMemoryEditMode ? "Edit Memory" : "Add Memory"} onSave={saveMemory} onCancel={() => { setShowMemoryForm(false); resetMemoryForm(); }}>
-          
-          <input placeholder="Category " value={memoryForm.component_category} onChange={(e) => setMemoryForm({ ...memoryForm, component_category: e.target.value })} />
+          <input placeholder="Category" value={memoryForm.component_category || ""} onChange={(e) => setMemoryForm({ ...memoryForm, component_category: e.target.value })} />
           <input placeholder="Memory Type" value={memoryForm.memory_type} onChange={(e) => setMemoryForm({ ...memoryForm, memory_type: e.target.value })} />
           <input placeholder="Module Capacity GB" value={memoryForm.module_capacity_gb} onChange={(e) => setMemoryForm({ ...memoryForm, module_capacity_gb: e.target.value })} />
           <input placeholder="Memory Speed (MT/s)" value={memoryForm.memory_speed_mts} onChange={(e) => setMemoryForm({ ...memoryForm, memory_speed_mts: e.target.value })} />
           <input placeholder="Memory Channels" value={memoryForm.memory_channels} onChange={(e) => setMemoryForm({ ...memoryForm, memory_channels: e.target.value })} />
-          {/* <input placeholder="DIMMs Per Channel" value={memoryForm.dimms_per_channel} onChange={(e) => setMemoryForm({ ...memoryForm, dimms_per_channel: e.target.value })} /> */}
           <input placeholder="Total Memory Per Node GB" value={memoryForm.total_memory_per_node_gb} onChange={(e) => setMemoryForm({ ...memoryForm, total_memory_per_node_gb: e.target.value })} />
           <input type="number" placeholder="Price" value={memoryForm.price} onChange={(e) => setMemoryForm({ ...memoryForm, price: e.target.value })} />
         </Modal>
@@ -817,7 +1143,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
       {/* ================= GPU FORM ================= */}
       {showGpuForm && (
-        <Modal title={isGpuEditMode ? "Edit GPU" : "Add GPU"} onSave={saveGpu} onCancel={() => setShowGpuForm(false)}>
+        <Modal title={isGpuEditMode ? "Edit GPU" : "Add GPU"} onSave={saveGpu} onCancel={() => { setShowGpuForm(false); resetGpuForm(); }}>
           <input placeholder="Component Category" value={gpuForm.component_category} onChange={(e) => setGpuForm({ ...gpuForm, component_category: e.target.value })} />
           <input placeholder="GPU Name" value={gpuForm.name} onChange={(e) => setGpuForm({ ...gpuForm, name: e.target.value })} />
           <input placeholder="Architecture" value={gpuForm.architecture} onChange={(e) => setGpuForm({ ...gpuForm, architecture: e.target.value })} />
@@ -833,14 +1159,14 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
       {/* ================= INTERCONNECT FORM ================= */}
       {showInterconnectForm && (
-        <Modal title={isInterconnectEditMode ? "Edit Interconnect" : "Add Interconnect"} onSave={saveInterconnect} onCancel={() => setShowInterconnectForm(false)}>
-          <input placeholder="Category " value={interconnectForm.component_category} onChange={(e) => setInterconnectForm({ ...interconnectForm, component_category: e.target.value })} />
+        <Modal title={isInterconnectEditMode ? "Edit Interconnect" : "Add Interconnect"} onSave={saveInterconnect} onCancel={() => { setShowInterconnectForm(false); resetInterconnectForm(); }}>
+          <input placeholder="Category" value={interconnectForm.component_category || ""} onChange={(e) => setInterconnectForm({ ...interconnectForm, component_category: e.target.value })} />
           <input placeholder="Vendor" value={interconnectForm.vendor} onChange={(e) => setInterconnectForm({ ...interconnectForm, vendor: e.target.value })} />
           <input placeholder="Product Name" value={interconnectForm.product_name} onChange={(e) => setInterconnectForm({ ...interconnectForm, product_name: e.target.value })} />
           <input placeholder="Technology" value={interconnectForm.technology} onChange={(e) => setInterconnectForm({ ...interconnectForm, technology: e.target.value })} />
           <input type="number" placeholder="Port Speed Gbps" value={interconnectForm.port_speed_gbps} onChange={(e) => setInterconnectForm({ ...interconnectForm, port_speed_gbps: e.target.value })} />
           <input type="number" step="0.1" placeholder="Aggregate Bandwidth TBPS" value={interconnectForm.aggregate_bandwidth_tbps} onChange={(e) => setInterconnectForm({ ...interconnectForm, aggregate_bandwidth_tbps: e.target.value })} />
-          <input type="number" step="0.1" placeholder="Latency NS" value={interconnectForm.latency_ns} onChange={(e) => setInterconnectForm({ ...interconnectForm, latency_ns: e.target.value })} />          
+          <input type="number" step="0.1" placeholder="Latency NS" value={interconnectForm.latency_ns} onChange={(e) => setInterconnectForm({ ...interconnectForm, latency_ns: e.target.value })} />
           <input type="number" placeholder="Number of Ports" value={interconnectForm.number_of_ports} onChange={(e) => setInterconnectForm({ ...interconnectForm, number_of_ports: e.target.value })} />
           <input type="number" placeholder="Price" value={interconnectForm.price} onChange={(e) => setInterconnectForm({ ...interconnectForm, price: e.target.value })} />
         </Modal>
@@ -906,7 +1232,6 @@ export default function PPMSDashboard({ isAdmin = false }) {
       {/* ================= STANDARD RACK FORM ================= */}
       {showRackForm && (
         <Modal title={isRackEditMode ? "Edit Standard Rack" : "Add Standard Rack"} onSave={saveRack} onCancel={() => { setShowRackForm(false); resetRackForm(); }}>
-          <input placeholder="Component Category" value={rackForm.component_category} onChange={(e) => setRackForm({ ...rackForm, component_category: e.target.value })} />
           <input placeholder="Name" value={rackForm.name} onChange={(e) => setRackForm({ ...rackForm, name: e.target.value })} />
           <input type="number" placeholder="Price" value={rackForm.price} onChange={(e) => setRackForm({ ...rackForm, price: e.target.value })} />
         </Modal>
@@ -920,7 +1245,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
         <thead>
           <tr>
             <th>Node Type</th><th>Quantity</th><th>RPeak (TFLOPS)</th>
-            <th>Formula Used <br/> (base * cores * fpc * cpucount) / 1000</th><th>Total TFLOPS</th>
+            <th>Formula Used <br />(base * cores * fpc * cpucount) / 1000</th><th>Total TFLOPS</th>
           </tr>
         </thead>
         <tbody>
@@ -929,10 +1254,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
               <td>{row.label}</td>
               <td>{row.qty}</td>
               <td>{row.val.toFixed(2)}</td>
-              <td
-                  style={{ fontSize: "12px", maxWidth: "500px", wordBreak: "break-word" }}
-                  dangerouslySetInnerHTML={{ __html: row.formula }}
-                />
+              <td style={{ fontSize: "12px", maxWidth: "500px", wordBreak: "break-word" }} dangerouslySetInnerHTML={{ __html: row.formula }} />
               <td>{(row.val * row.qty).toFixed(2)}</td>
             </tr>
           ))}
