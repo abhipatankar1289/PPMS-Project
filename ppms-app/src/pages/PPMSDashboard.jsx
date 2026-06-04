@@ -4,7 +4,108 @@ import axios from "axios";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const BASE_URL = "http://localhost:8080/api";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || `${BACKEND_URL}/api`;
+
+// Simple reusable modal component used across the dashboard
+function Modal({ title, onSave, onCancel, children }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box">
+        <h2>{title}</h2>
+        <div className="form-grid">{children}</div>
+        <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+          <button onClick={onSave}>Save</button>
+          <button onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditPickerModal({ type, title, items = [], selectedItem, onSelectItem, onConfirm, onDelete, onCancel, getLabel, getSubLabel }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: "500px" }}>
+        <h2>Select {title}</h2>
+        <p style={{ color: "#666", fontSize: "13px", marginBottom: "12px" }}>
+          Click an item to select it, then choose an action below.
+        </p>
+        <div style={{ maxHeight: "350px", overflowY: "auto", border: "1px solid #ddd", borderRadius: "6px" }}>
+          {items.length === 0 ? (
+            <div style={{ padding: "20px", textAlign: "center", color: "#999" }}>No items found in database.</div>
+          ) : (
+            items.map((item, idx) => {
+              const isSelected = selectedItem?.id === item.id;
+              return (
+                <div
+                  key={idx}
+                  onClick={() => onSelectItem(item)}
+                  style={{
+                    padding: "12px 16px",
+                    cursor: "pointer",
+                    borderBottom: "1px solid #eee",
+                    background: isSelected ? "#e3f2fd" : idx % 2 === 0 ? "#fafafa" : "#fff",
+                    borderLeft: isSelected ? "4px solid #1976d2" : "4px solid transparent",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <div style={{ fontWeight: isSelected ? "bold" : "normal", color: isSelected ? "#1976d2" : "#333" }}>
+                    {getLabel ? getLabel(item) : (item.name || item.model || item.service_name)}
+                  </div>
+                  {getSubLabel && (
+                    <div style={{ fontSize: "12px", color: "#888", marginTop: "3px" }}>
+                      {getSubLabel(item)}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div style={{ borderTop: "1px solid #e0e0e0", marginTop: "16px", paddingTop: "14px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            onClick={onConfirm}
+            disabled={!selectedItem}
+            style={{
+              background: selectedItem ? "#1976d2" : "#477bca",
+              color: "white", border: "none", padding: "10px 18px",
+              borderRadius: "5px", cursor: selectedItem ? "pointer" : "not-allowed",
+              fontWeight: "600",
+            }}
+          >
+            ✏️ Edit Selected
+          </button>
+
+          <button
+            onClick={onDelete}
+            disabled={!selectedItem}
+            style={{
+              background: selectedItem ? "#d32f2f" : "#be5151",
+              color: "white", border: "none", padding: "10px 18px",
+              borderRadius: "5px", cursor: selectedItem ? "pointer" : "not-allowed",
+              fontWeight: "600",
+            }}
+          >
+            🗑️ Delete Selected
+          </button>
+
+          <button
+            onClick={onCancel}
+            style={{
+              background: "#4f8ce7", color: "#fdfeff", border: "1px solid #020913",
+              padding: "10px 18px", borderRadius: "5px", cursor: "pointer",
+              fontWeight: "600", marginLeft: "auto",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function PPMSDashboard({ isAdmin = false }) {
 
@@ -88,14 +189,25 @@ export default function PPMSDashboard({ isAdmin = false }) {
   const [isRackEditMode, setIsRackEditMode] = useState(false);
   const [rackForm, setRackForm] = useState({ id: null, name: "", price: "" });
 
+  /* =============== Table B – Software Service State =============== */
+  const [showServiceForm, setShowServiceForm] = useState(false);
+  const [isServiceEditMode, setIsServiceEditMode] = useState(false);
+  const [serviceForm, setServiceForm] = useState({
+    id: null, service_name: "", unit: "", price: "",
+  });
+
+  /* =============== Table C – Workshop / Add-on Service State =============== */
+  const [showWorkshopForm, setShowWorkshopForm] = useState(false);
+  const [isWorkshopEditMode, setIsWorkshopEditMode] = useState(false);
+  const [workshopForm, setWorkshopForm] = useState({
+    id: null, service_name: "", unit: "", price: "",
+  });
+
   /* ===============================================================
      EDIT PICKER STATE
-     editPicker = { type: "processor"|"memory"|"gpu"|"interconnect"|
-                    "kvm"|"pfs"|"secondary"|"mgmt"|"ocp"|"rack" }
-     editPickerSelected = the item chosen in the picker list
   =============================================================== */
-  const [editPicker, setEditPicker] = useState(null);          // which picker panel to show
-  const [editPickerSelected, setEditPickerSelected] = useState(null); // item highlighted in picker
+  const [editPicker, setEditPicker] = useState(null);
+  const [editPickerSelected, setEditPickerSelected] = useState(null);
 
   /* ================= DATABASE DROPDOWN DATA ================= */
   const [processors, setProcessors] = useState([]);
@@ -105,17 +217,11 @@ export default function PPMSDashboard({ isAdmin = false }) {
   const [simpleDropdownComponents, setSimpleDropdownComponents] = useState([]);
   const [usdRate, setUsdRate] = useState(90);
 
-  /* ================= TABLE B & C PRICE MAPS ================= */
-  const [servicePrices, setServicePrices] = useState({});
-  const [workshopPrices, setWorkshopPrices] = useState({});
+  /* ================= TABLE B & C PRICE MAPS + RAW LISTS ================= */
+  const [serviceList, setServiceList] = useState([]);   // raw list for picker
+  const [workshopList, setWorkshopList] = useState([]); // raw list for picker
 
   /* ================= FETCH DATA WITH POLLING ================= */
-  useEffect(() => {
-    fetchData();
-    const pollingInterval = setInterval(() => { fetchData(); }, 5000);
-    return () => clearInterval(pollingInterval);
-  }, []);
-
   const fetchData = async () => {
     try {
       const results = await Promise.allSettled([
@@ -154,7 +260,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
         if (rateObj) setUsdRate(rateObj.value);
       }
 
-      setSimpleDropdownComponents([
+      const simpleComponents = [
         {
           name: "KVM Switch", options: kvm || [], apiKey: "kvm",
           getHover: (o) => `Spec: ${o.specification}\nPorts: ${o.ports}\nForm Factor: ${o.formFactor}`,
@@ -189,19 +295,30 @@ export default function PPMSDashboard({ isAdmin = false }) {
           pickerType: "rack",
           getLabel: (o) => o.name,
         },
-      ]);
+      ];
+      setSimpleDropdownComponents(simpleComponents);
+      setSimpleState((prev) => {
+        if (prev.length === simpleComponents.length) return prev;
+        const next = prev.slice(0, simpleComponents.length);
+        for (let i = next.length; i < simpleComponents.length; i++) {
+          next.push({ selected: null, qty: 1 });
+        }
+        return next;
+      });
 
-      const serviceMap = {};
-      (services || []).forEach((s) => { serviceMap[s.service_name || s.name] = s.price; });
-      setServicePrices(serviceMap);
-
-      const workshopMap = {};
-      (workshop || []).forEach((w) => { workshopMap[w.service_name || w.name] = w.price; });
-      setWorkshopPrices(workshopMap);
+      // Store raw lists for pickers
+      setServiceList(services || []);
+      setWorkshopList(workshop || []);
     } catch (err) {
       console.error("Polling API Error:", err);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+    const pollingInterval = setInterval(() => { fetchData(); }, 5000);
+    return () => clearInterval(pollingInterval);
+  }, []);
 
   /* ================= NODE STATE ================= */
   const nodeTemplate = {
@@ -216,10 +333,6 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   const [activeNode, setActiveNode] = useState(null);
   const [simpleState, setSimpleState] = useState([]);
-
-  useEffect(() => {
-    setSimpleState(simpleDropdownComponents.map(() => ({ selected: null, qty: 1 })));
-  }, [simpleDropdownComponents]);
 
   /* ================= CALCULATIONS ================= */
   const calculateNodeCost = (node) => {
@@ -238,21 +351,31 @@ export default function PPMSDashboard({ isAdmin = false }) {
     calculateNodeCost(nodes.hm) + calculateNodeCost(nodes.gpuNode) +
     calculateSimpleCost();
 
-  /* ================= TABLE B & C STATE ================= */
-  const [tableB, setTableB] = useState([
-    { name: "C-DAC HPC System software and tools", unit: "Year", qty: 1 },
-    { name: "Installation & Configuration", unit: "One time", qty: 1 },
-    { name: "Onsite Resident HPC System Engineer per year", unit: "Year", qty: 1 },
-    { name: "Onsite Resident HPC Application Engineer per year", unit: "Year", qty: 1 },
-  ]);
+  /* ================= TABLE B & C QTY MAPS ================= */
+  // tableB and tableC rows are derived live from serviceList / workshopList.
+  // We only store the user-editable qty per item id so new DB entries appear immediately.
+  const [tableBQty, setTableBQty] = useState({});  // { [id]: qty }
+  const [tableCQty, setTableCQty] = useState({});  // { [id]: qty }
 
-  const [tableC, setTableC] = useState([
-    { name: "Workshop for 7 days Per Year", unit: "Nos", qty: 1 },
-    { name: "Scientific exchange program ", unit: "Nos", qty: 1 },
-  ]);
+  // Derived rows — always in sync with the latest fetch
+  const tableB = serviceList.map((s) => ({
+    id: s.id,
+    name: s.service_name,
+    price: s.price || 0,
+    unit: s.unit || s.unit_type || s.service_unit || "",
+    qty: tableBQty[s.id] ?? 1,
+  }));
 
-  const totalB_INR = tableB.reduce((sum, item) => sum + (servicePrices[item.name] || 0) * item.qty, 0);
-  const totalC_INR = tableC.reduce((sum, item) => sum + (workshopPrices[item.name] || 0) * item.qty, 0);
+  const tableC = workshopList.map((w) => ({
+    id: w.id,
+    name: w.service_name,
+    unit: w.unit || w.unit_type || w.service_unit || "",
+    price: w.price || 0,
+    qty: tableCQty[w.id] ?? 1,
+  }));
+
+  const totalB_INR = tableB.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const totalC_INR = tableC.reduce((sum, item) => sum + item.price * item.qty, 0);
   const grandTotal_INR = hardwareTotal_INR + totalB_INR + totalC_INR;
   const grandTotal_USD = Math.round(grandTotal_INR / usdRate);
 
@@ -304,13 +427,14 @@ export default function PPMSDashboard({ isAdmin = false }) {
     interconnect: "interconnect", kvm: "kvm", pfs: "pfs",
     secondary: "secondary-interconnect", mgmt: "management-network",
     ocp: "ocp-rack", rack: "standard-rack",
+    service: "software-service", workshop: "addon_service",
   };
 
   const handlePickerDelete = async () => {
     if (!editPickerSelected) { alert("Please select an item to delete"); return; }
     const item = editPickerSelected;
     const apiKey = pickerApiKeyMap[editPicker];
-    const label = item.model || item.name || item.product_name || item.memory_type || "this item";
+    const label = item.model || item.name || item.product_name || item.memory_type || item.service_name || "this item";
     const confirmed = window.confirm(`Do you want to Delete "${label}"?\n`);
     if (!confirmed) return;
     try {
@@ -324,11 +448,6 @@ export default function PPMSDashboard({ isAdmin = false }) {
     }
   };
 
-  /* =================================================================
-     EDIT PICKER OPENER
-     Called when admin clicks Edit in the node config panel or Table A.
-     Opens a selection panel listing all items of that type from DB.
-  ================================================================= */
   const openEditPicker = (type) => {
     setEditPickerSelected(null);
     setEditPicker(type);
@@ -339,8 +458,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
     setEditPickerSelected(null);
   };
 
-  /* After admin selects an item from the picker and clicks "Edit Selected",
-     pre-fill the correct form and open it in edit mode. */
+  /* ================= EDIT PICKER CONFIRM ================= */
   const handlePickerConfirm = () => {
     if (!editPickerSelected) { alert("Please select an item to edit"); return; }
     const item = editPickerSelected;
@@ -436,6 +554,29 @@ export default function PPMSDashboard({ isAdmin = false }) {
       setIsRackEditMode(true);
       setShowRackForm(true);
     }
+    /* ---- TABLE B: Software Service ---- */
+    else if (editPicker === "service") {
+      setServiceForm({
+        id: item.id,
+        service_name: item.service_name || "",
+        unit: item.unit || "",
+        price: item.price || "",
+      });
+      setIsServiceEditMode(true);
+      setShowServiceForm(true);
+    }
+    /* ---- TABLE C: Workshop / Add-on Service ---- */
+    else if (editPicker === "workshop") {
+      setWorkshopForm({
+        id: item.id,
+        service_name: item.service_name || "",
+        unit: item.unit || "",
+        price: item.price || "",
+      });
+      setIsWorkshopEditMode(true);
+      setShowWorkshopForm(true);
+    }
+
     closeEditPicker();
   };
 
@@ -618,9 +759,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
   /* ================= OCP RACK CRUD ================= */
   const saveOcp = async () => {
     const { name, price } = ocpForm;
-    if (!name || !price) {
-      alert("Please fill all fields before saving."); return;
-    }
+    if (!name || !price) { alert("Please fill all fields before saving."); return; }
     try {
       if (isOcpEditMode) {
         await axios.put(`${BASE_URL}/ocp-rack/${ocpForm.id}`, ocpForm);
@@ -640,9 +779,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
   /* ================= STANDARD RACK CRUD ================= */
   const saveRack = async () => {
     const { name, price } = rackForm;
-    if (!name || !price) {
-      alert("Please fill all fields before saving."); return;
-    }
+    if (!name || !price) { alert("Please fill all fields before saving."); return; }
     try {
       if (isRackEditMode) {
         await axios.put(`${BASE_URL}/standard-rack/${rackForm.id}`, rackForm);
@@ -657,6 +794,60 @@ export default function PPMSDashboard({ isAdmin = false }) {
   const resetRackForm = () => {
     setRackForm({ id: null, name: "", price: "" });
     setIsRackEditMode(false);
+  };
+
+  /* =================================================================
+     TABLE B – SOFTWARE SERVICE CRUD
+     Backend: POST /api/software-service   → add
+              PUT  /api/software-service/{id} → update  (add this to SoftwareService_Controller)
+              DELETE /api/software-service/{id} → delete
+  ================================================================= */
+  const saveService = async () => {
+    const { service_name, unit, price } = serviceForm;
+    if (!service_name || !unit || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
+    try {
+      if (isServiceEditMode) {
+        await axios.put(`${BASE_URL}/software-service/${serviceForm.id}`, serviceForm);
+        alert("Software Service Updated Successfully");
+      } else {
+        await axios.post(`${BASE_URL}/software-service`, serviceForm);
+        alert("Software Service Added Successfully");
+      }
+      fetchData(); setShowServiceForm(false); resetServiceForm();
+    } catch (err) { console.error(err); alert("Error Saving Software Service"); }
+  };
+  const resetServiceForm = () => {
+    setServiceForm({ id: null, service_name: "", unit: "", price: "" });
+    setIsServiceEditMode(false);
+  };
+
+  /* =================================================================
+     TABLE C – WORKSHOP / ADD-ON SERVICE CRUD
+     Backend: POST /api/addon_service        → add
+              PUT  /api/addon_service/{id}   → update  (add this to Workshop_Controller)
+              DELETE /api/addon_service/{id} → delete
+  ================================================================= */
+  const saveWorkshop = async () => {
+    const { service_name, unit, price } = workshopForm;
+    if (!service_name || !unit || !price) {
+      alert("Please fill all fields before saving."); return;
+    }
+    try {
+      if (isWorkshopEditMode) {
+        await axios.put(`${BASE_URL}/addon_service/${workshopForm.id}`, workshopForm);
+        alert("Add-on Service Updated Successfully");
+      } else {
+        await axios.post(`${BASE_URL}/addon_service`, workshopForm);
+        alert("Add-on Service Added Successfully");
+      }
+      fetchData(); setShowWorkshopForm(false); resetWorkshopForm();
+    } catch (err) { console.error(err); alert("Error Saving Add-on Service"); }
+  };
+  const resetWorkshopForm = () => {
+    setWorkshopForm({ id: null, service_name: "", unit: "", price: "" });
+    setIsWorkshopEditMode(false);
   };
 
   /* ================= HELPER: open add form for simple component ================= */
@@ -694,8 +885,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
       });
       callAutoTable(doc, { startY: 40, head: [["Component", "Selected Model", "Qty"]], body: nodeRows, theme: "striped", headStyles: { fillColor: [44, 62, 80] } });
       const serviceRows = [...tableB, ...tableC].map((item) => {
-        const price = servicePrices[item.name] || workshopPrices[item.name] || 0;
-        return [item.name, item.unit, item.qty, price.toLocaleString("en-IN"), (price * item.qty).toLocaleString("en-IN")];
+        return [item.name, "-", item.qty, item.price.toLocaleString("en-IN"), (item.price * item.qty).toLocaleString("en-IN")];
       });
       callAutoTable(doc, { startY: doc.lastAutoTable.finalY + 10, head: [["Service Details", "Unit", "Qty", "Unit Price", "Total (INR)"]], body: serviceRows, theme: "grid", headStyles: { fillColor: [52, 73, 94] } });
       const summaryRows = [
@@ -712,111 +902,6 @@ export default function PPMSDashboard({ isAdmin = false }) {
       alert("Error generating PDF. Please ensure jspdf-autotable is installed.");
     }
   };
-
-  /* ================= REUSABLE MODAL WRAPPER ================= */
-  const Modal = ({ title, onSave, onCancel, children }) => (
-    <div className="modal-overlay">
-      <div className="modal-box">
-        <h2>{title}</h2>
-        <div className="form-grid">{children}</div>
-        <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
-          <button onClick={onSave}>Save</button>
-          <button onClick={onCancel}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  );
-
-  /* =================================================================
-     EDIT PICKER MODAL
-     Shows a list of all items of the given type.
-     Admin clicks one to highlight it, then clicks "Edit Selected".
-  ================================================================= */
-  const EditPickerModal = ({ type, title, items, getLabel, getSubLabel }) => (
-    <div className="modal-overlay">
-      <div className="modal-box" style={{ maxWidth: "500px" }}>
-        <h2>Select {title}</h2>
-        <p style={{ color: "#666", fontSize: "13px", marginBottom: "12px" }}>
-          Click an item to select it, then choose an action below.
-        </p>
-        <div style={{ maxHeight: "350px", overflowY: "auto", border: "1px solid #ddd", borderRadius: "6px" }}>
-          {items.length === 0 ? (
-            <div style={{ padding: "20px", textAlign: "center", color: "#999" }}>No items found in database.</div>
-          ) : (
-            items.map((item, idx) => {
-              const isSelected = editPickerSelected?.id === item.id;
-              return (
-                <div
-                  key={idx}
-                  onClick={() => setEditPickerSelected(item)}
-                  style={{
-                    padding: "12px 16px",
-                    cursor: "pointer",
-                    borderBottom: "1px solid #eee",
-                    background: isSelected ? "#e3f2fd" : idx % 2 === 0 ? "#fafafa" : "#fff",
-                    borderLeft: isSelected ? "4px solid #1976d2" : "4px solid transparent",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  <div style={{ fontWeight: isSelected ? "bold" : "normal", color: isSelected ? "#1976d2" : "#333" }}>
-                    {getLabel(item)}
-                  </div>
-                  {getSubLabel && (
-                    <div style={{ fontSize: "12px", color: "#888", marginTop: "3px" }}>
-                      {getSubLabel(item)}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Divider */}
-        <div style={{ borderTop: "1px solid #e0e0e0", marginTop: "16px", paddingTop: "14px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          {/* Edit Selected */}
-          <button
-            onClick={handlePickerConfirm}
-            disabled={!editPickerSelected}
-            style={{
-              background: editPickerSelected ? "#1976d2" : "#477bca",
-              color: "white", border: "none", padding: "10px 18px",
-              borderRadius: "5px", cursor: editPickerSelected ? "pointer" : "not-allowed",
-              fontWeight: "600",
-            }}
-          >
-            ✏️ Edit Selected
-          </button>
-
-          {/* Delete Selected */}
-          <button
-            onClick={handlePickerDelete}
-            disabled={!editPickerSelected}
-            style={{
-              background: editPickerSelected ? "#d32f2f" : "#be5151",
-              color: "white", border: "none", padding: "10px 18px",
-              borderRadius: "5px", cursor: editPickerSelected ? "pointer" : "not-allowed",
-              fontWeight: "600",
-            }}
-          >
-            🗑️ Delete Selected
-          </button>
-
-          {/* Cancel */}
-          <button
-            onClick={closeEditPicker}
-            style={{
-              background: "#4f8ce7", color: "#fdfeff", border: "1px solid #020913",
-              padding: "10px 18px", borderRadius: "5px", cursor: "pointer",
-              fontWeight: "600", marginLeft: "auto",
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
   /* ================= ADMIN BUTTON STYLES ================= */
   const btnStyle = (color) => ({
@@ -1022,87 +1107,146 @@ export default function PPMSDashboard({ isAdmin = false }) {
       )}
 
       {/* ================================================================
-          EDIT PICKER MODALS — one per component type
-          Only one shows at a time based on editPicker state
+          EDIT PICKER MODALS
       ================================================================ */}
       {editPicker === "processor" && (
-        <EditPickerModal
-          type="processor" title="Processor"
-          items={processors}
+        <EditPickerModal type="processor" title="Processor" items={processors}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(p) => p.model}
           getSubLabel={(p) => `${p.manufacturer} | ${p.architecture} | ${p.cores_per_cpu} cores | ₹${Number(p.price || 0).toLocaleString("en-IN")}`}
         />
       )}
       {editPicker === "memory" && (
-        <EditPickerModal
-          type="memory" title="Memory"
-          items={memoryList}
+        <EditPickerModal type="memory" title="Memory" items={memoryList}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(m) => `${m.memory_type} (${m.total_memory_per_node_gb} GB/Node)`}
           getSubLabel={(m) => `${m.memory_speed_mts} MT/s | ${m.memory_channels} channels | ₹${Number(m.price || 0).toLocaleString("en-IN")}`}
         />
       )}
       {editPicker === "gpu" && (
-        <EditPickerModal
-          type="gpu" title="GPU"
-          items={gpuOptions}
+        <EditPickerModal type="gpu" title="GPU" items={gpuOptions}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(g) => g.name || g.model}
           getSubLabel={(g) => `${g.manufacturer} | ${g.architecture} | FP64: ${g.fp64} | ₹${Number(g.price || 0).toLocaleString("en-IN")}`}
         />
       )}
       {editPicker === "interconnect" && (
-        <EditPickerModal
-          type="interconnect" title="Interconnect"
-          items={interconnects}
+        <EditPickerModal type="interconnect" title="Interconnect" items={interconnects}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(i) => i.product_name}
           getSubLabel={(i) => `${i.vendor} | ${i.technology} | ${i.port_speed_gbps} Gbps | ₹${Number(i.price || 0).toLocaleString("en-IN")}`}
         />
       )}
       {editPicker === "kvm" && (
-        <EditPickerModal
-          type="kvm" title="KVM Switch"
+        <EditPickerModal type="kvm" title="KVM Switch"
           items={simpleDropdownComponents.find(c => c.pickerType === "kvm")?.options || []}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(k) => k.name}
           getSubLabel={(k) => `${k.specification} | ${k.ports} ports | ${k.formFactor} | ₹${Number(k.price || 0).toLocaleString("en-IN")}`}
         />
       )}
       {editPicker === "pfs" && (
-        <EditPickerModal
-          type="pfs" title="PFS Storage"
+        <EditPickerModal type="pfs" title="PFS Storage"
           items={simpleDropdownComponents.find(c => c.pickerType === "pfs")?.options || []}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(p) => p.name}
           getSubLabel={(p) => `${p.manufacturer} | ${p.total_capacity_pb} PB | ${p.software_model} | ₹${Number(p.price || 0).toLocaleString("en-IN")}`}
         />
       )}
       {editPicker === "secondary" && (
-        <EditPickerModal
-          type="secondary" title="Secondary Interconnect"
+        <EditPickerModal type="secondary" title="Secondary Interconnect"
           items={simpleDropdownComponents.find(c => c.pickerType === "secondary")?.options || []}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(s) => s.product_name}
           getSubLabel={(s) => `${s.vendor} | ${s.technology} | ${s.port_speed_gbps} Gbps | ₹${Number(s.price || 0).toLocaleString("en-IN")}`}
         />
       )}
       {editPicker === "mgmt" && (
-        <EditPickerModal
-          type="mgmt" title="Management Network"
+        <EditPickerModal type="mgmt" title="Management Network"
           items={simpleDropdownComponents.find(c => c.pickerType === "mgmt")?.options || []}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(m) => m.product_name}
           getSubLabel={(m) => `${m.vendor} | ${m.technology} | ${m.port_speed_gbps} Gbps | ₹${Number(m.price || 0).toLocaleString("en-IN")}`}
         />
       )}
       {editPicker === "ocp" && (
-        <EditPickerModal
-          type="ocp" title="OCP Rack"
+        <EditPickerModal type="ocp" title="OCP Rack"
           items={simpleDropdownComponents.find(c => c.pickerType === "ocp")?.options || []}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(o) => o.name}
           getSubLabel={(o) => `₹${Number(o.price || 0).toLocaleString("en-IN")}`}
         />
       )}
       {editPicker === "rack" && (
-        <EditPickerModal
-          type="rack" title="Standard Rack"
+        <EditPickerModal type="rack" title="Standard Rack"
           items={simpleDropdownComponents.find(c => c.pickerType === "rack")?.options || []}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
           getLabel={(r) => r.name}
           getSubLabel={(r) => `₹${Number(r.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {/* ---- Table B picker ---- */}
+      {editPicker === "service" && (
+        <EditPickerModal type="service" title="Software Service" items={serviceList}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
+          getLabel={(s) => s.service_name}
+          getSubLabel={(s) => `₹${Number(s.price || 0).toLocaleString("en-IN")}`}
+        />
+      )}
+      {/* ---- Table C picker ---- */}
+      {editPicker === "workshop" && (
+        <EditPickerModal type="workshop" title="Add-on Service" items={workshopList}
+          selectedItem={editPickerSelected}
+          onSelectItem={setEditPickerSelected}
+          onConfirm={handlePickerConfirm}
+          onDelete={handlePickerDelete}
+          onCancel={closeEditPicker}
+          getLabel={(w) => w.service_name}
+          getSubLabel={(w) => `₹${Number(w.price || 0).toLocaleString("en-IN")}`}
         />
       )}
 
@@ -1237,6 +1381,58 @@ export default function PPMSDashboard({ isAdmin = false }) {
         </Modal>
       )}
 
+      {/* ================= TABLE B SOFTWARE SERVICE FORM ================= */}
+      {showServiceForm && (
+        <Modal
+          title={isServiceEditMode ? "Edit Software Service" : "Add Software Service"}
+          onSave={saveService}
+          onCancel={() => { setShowServiceForm(false); resetServiceForm(); }}
+        >
+          <input
+            placeholder="Service Name"
+            value={serviceForm.service_name}
+            onChange={(e) => setServiceForm({ ...serviceForm, service_name: e.target.value })}
+          />
+          <input
+            placeholder="Unit"
+            value={serviceForm.unit}
+            onChange={(e) => setServiceForm({ ...serviceForm, unit: e.target.value })}
+          />
+          <input
+            type="number"
+            placeholder="Price (₹)"
+            value={serviceForm.price}
+            onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })}
+          />
+        </Modal>
+      )}
+
+      {/* ================= TABLE C WORKSHOP / ADD-ON SERVICE FORM ================= */}
+      {showWorkshopForm && (
+        <Modal
+          title={isWorkshopEditMode ? "Edit Add-on Service" : "Add Add-on Service"}
+          onSave={saveWorkshop}
+          onCancel={() => { setShowWorkshopForm(false); resetWorkshopForm(); }}
+        >
+          <input
+            placeholder="Service Name"
+            value={workshopForm.service_name}
+            onChange={(e) => setWorkshopForm({ ...workshopForm, service_name: e.target.value })}
+          />
+          <input
+            placeholder="Unit"
+            value={workshopForm.unit}
+            onChange={(e) => setWorkshopForm({ ...workshopForm, unit: e.target.value })}
+          />
+          <input
+            type="number"
+            placeholder="Price (₹)"
+            value={workshopForm.price}
+            onChange={(e) => setWorkshopForm({ ...workshopForm, price: e.target.value })}
+          />
+        </Modal>
+      )}
+
       {/* ========================================================= */}
       {/* ================= TABLE RPEAK =========================== */}
       {/* ========================================================= */}
@@ -1245,7 +1441,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
         <thead>
           <tr>
             <th>Node Type</th><th>Quantity</th><th>RPeak (TFLOPS)</th>
-            <th>Formula Used <br />(base * cores * fpc * cpucount) / 1000</th><th>Total TFLOPS</th>
+            <th>Formula Used <br />(base * cores * fpc * cpucount) / 1000</th><th>Total FLOPS</th>
           </tr>
         </thead>
         <tbody>
@@ -1259,46 +1455,82 @@ export default function PPMSDashboard({ isAdmin = false }) {
             </tr>
           ))}
           <tr style={{ background: "#dff0d8", fontWeight: "bold" }}>
-            <td colSpan="4">Total System RPeak</td>
-            <td>{dynamicRpeak.reduce((sum, row) => sum + row.val * row.qty, 0).toFixed(2)} TFLOPS</td>
-          </tr>
+          <td colSpan="4">Total FLOPS</td>
+          <td>
+            {(() => {
+              const totalTflops = dynamicRpeak.reduce((sum, row) => sum + row.val * row.qty, 0);
+              if (totalTflops >= 1000) {
+                return `${(totalTflops / 1000).toFixed(2)} PFLOPS`;
+              }
+              return `${totalTflops.toFixed(2)} TFLOPS`;
+            })()}
+          </td>
+        </tr>
         </tbody>
       </table>
 
       {/* ========================================================= */}
       {/* ================= TABLE B =============================== */}
       {/* ========================================================= */}
-      <h2>Table B – Software Solutions & Services</h2>
+      <h2>Table B – Software Solutions &amp; Services</h2>
       <table>
         <thead>
           <tr>
-            <th>Service Details</th><th>Unit</th><th>Qty</th>
-            <th>Price</th><th>Total</th>
+            <th>Service Details</th>
+            <th>Unit</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th>Total</th>
             {isAdmin && <th>Admin Controls</th>}
           </tr>
         </thead>
         <tbody>
-          {tableB.map((item, idx) => {
-            const price = servicePrices[item.name] || 0;
+          {tableB.map((item) => {
             return (
-              <tr key={idx}>
+              <tr key={item.id}>
                 <td>{item.name}</td>
-                <td>{item.unit}</td>
+                <td>{item.unit || "-"}</td>
                 <td>
-                  <input type="number" min="1" value={item.qty} onChange={(e) => { const updated = [...tableB]; updated[idx].qty = Number(e.target.value); setTableB(updated); }} />
+                  <input
+                    type="number" min="1" value={item.qty}
+                    onChange={(e) =>
+                      setTableBQty((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
+                    }
+                  />
                 </td>
-                <td>{price.toLocaleString("en-IN")}</td>
-                <td>{(price * item.qty).toLocaleString("en-IN")}</td>
-                {isAdmin && (
-                  <td>
-                    <button style={btnStyle("green")} onClick={() => alert(`Add ${item.name}`)}>Add</button>
-                    <button style={btnStyle("orange")} onClick={() => alert(`Edit ${item.name}`)}>Edit</button>
-                  </td>
-                )}
+                <td>{item.price.toLocaleString("en-IN")}</td>
+                <td>{(item.price * item.qty).toLocaleString("en-IN")}</td>
+                {/* No per-row buttons — single Add/Edit row below */}
+                {isAdmin && <td>-</td>}
               </tr>
             );
           })}
         </tbody>
+
+        {/* ── Single Admin Controls row at the bottom of Table B ── */}
+        {isAdmin && (
+          <tfoot>
+            <tr>
+              <td colSpan="4" style={{ textAlign: "right", paddingRight: "12px", fontWeight: "600", color: "#555" }}>
+                Manage Software Services:
+              </td>
+              <td colSpan="2">
+                <button
+                  style={btnStyle("green")}
+                  onClick={() => { resetServiceForm(); setIsServiceEditMode(false); setShowServiceForm(true); }}
+                >
+                  ➕ Add
+                </button>
+                <button
+                  style={btnStyle("orange")}
+                  onClick={() => openEditPicker("service")}
+                >
+                  ✏️ Edit / Delete
+                </button>
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
 
       {/* ========================================================= */}
@@ -1308,33 +1540,61 @@ export default function PPMSDashboard({ isAdmin = false }) {
       <table>
         <thead>
           <tr>
-            <th>Service Details</th><th>Unit</th><th>Qty</th>
-            <th>Price</th><th>Total</th>
+            <th>Service Details</th>
+            <th>Unit</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th>Total</th>
             {isAdmin && <th>Admin Controls</th>}
           </tr>
         </thead>
         <tbody>
-          {tableC.map((item, idx) => {
-            const price = workshopPrices[item.name] || 0;
+          {tableC.map((item) => {
             return (
-              <tr key={idx}>
+              <tr key={item.id}>
                 <td>{item.name}</td>
-                <td>{item.unit}</td>
+                <td>{item.unit || "-"}</td>
                 <td>
-                  <input type="number" min="1" value={item.qty} onChange={(e) => { const updated = [...tableC]; updated[idx].qty = Number(e.target.value); setTableC(updated); }} />
+                  <input
+                    type="number" min="1" value={item.qty}
+                    onChange={(e) =>
+                      setTableCQty((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
+                    }
+                  />
                 </td>
-                <td>{price.toLocaleString("en-IN")}</td>
-                <td>{(price * item.qty).toLocaleString("en-IN")}</td>
-                {isAdmin && (
-                  <td>
-                    <button style={btnStyle("green")} onClick={() => alert(`Add ${item.name}`)}>Add</button>
-                    <button style={btnStyle("orange")} onClick={() => alert(`Edit ${item.name}`)}>Edit</button>
-                  </td>
-                )}
+                <td>{item.price.toLocaleString("en-IN")}</td>
+                <td>{(item.price * item.qty).toLocaleString("en-IN")}</td>
+                {/* No per-row buttons — single Add/Edit row below */}
+                {isAdmin && <td>-</td>}
               </tr>
             );
           })}
         </tbody>
+
+        {/* ── Single Admin Controls row at the bottom of Table C ── */}
+        {isAdmin && (
+          <tfoot>
+            <tr>
+              <td colSpan="4" style={{ textAlign: "right", paddingRight: "12px", fontWeight: "600", color: "#555" }}>
+                Manage Add-on Services:
+              </td>
+              <td colSpan="2">
+                <button
+                  style={btnStyle("green")}
+                  onClick={() => { resetWorkshopForm(); setIsWorkshopEditMode(false); setShowWorkshopForm(true); }}
+                >
+                  ➕ Add
+                </button>
+                <button
+                  style={btnStyle("orange")}
+                  onClick={() => openEditPicker("workshop")}
+                >
+                  ✏️ Edit / Delete
+                </button>
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
 
       {/* ========================================================= */}
@@ -1344,7 +1604,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
       <table className="summary-table">
         <tbody>
           <tr><td>Hardware Total</td><td>₹ {hardwareTotal_INR.toLocaleString("en-IN")}</td></tr>
-          <tr><td>Software & Services Total</td><td>₹ {totalB_INR.toLocaleString("en-IN")}</td></tr>
+          <tr><td>Software &amp; Services Total</td><td>₹ {totalB_INR.toLocaleString("en-IN")}</td></tr>
           <tr><td>Add-on Services Total</td><td>₹ {totalC_INR.toLocaleString("en-IN")}</td></tr>
           <tr className="grand-total-highlight">
             <td><strong>Grand Total (INR)</strong></td>
@@ -1360,8 +1620,8 @@ export default function PPMSDashboard({ isAdmin = false }) {
       {/* ========================================================= */}
       {/* ================= PDF BUTTON ============================ */}
       {/* ========================================================= */}
-      <div style={{ textAlign: "center", marginTop: "30px", marginBottom: "50px" }}>
-        <button className="pdf-btn" onClick={generatePDF}>Download PDF Report</button>
+      <div style={{ textAlign: "center", marginTop: "30px", marginBottom: "50px",  }}>
+        <button style = {{backgroundColor: "#5fc468"}}className="pdf-btn" onClick={generatePDF}>Download PDF Report</button>
       </div>
 
     </div>

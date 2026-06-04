@@ -9,6 +9,8 @@ function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+  const authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL || `${backendUrl}/auth`;
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -17,8 +19,7 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Note: Ensure your backend is running on 8081 or update to 8080 if integrated
-      const res = await axios.post('http://localhost:8080/auth/login', form);
+      const res = await axios.post(`${authBaseUrl}/login`, form);
 
       login(res.data.token, res.data.role);
 

@@ -1,16 +1,22 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useContext } from "react";
+import { Link, useNavigate } from "react-router-dom";
 // Import icons
 import { Home, Info, Mail, User, LogOut } from "lucide-react"; 
 import "./Navbar.css";
+import { AuthContext } from "../context/AuthContext.jsx";
 
 export default function Navbar() {
+  const navigate = useNavigate();
+  const { role, logout } = useContext(AuthContext);
+
+  const homePath = role === "ADMIN" ? "/admin" : "/dashboard";
+
   return (
     <nav className="navbar">
       <div className="nav-logo">PPMS Dashboard</div>
       <ul className="nav-links">
         <li>
-          <Link to="/dashboard">
+          <Link to={homePath}>
             <Home size={18} /> Home
           </Link>
         </li>
@@ -31,10 +37,14 @@ export default function Navbar() {
         </li>
       </ul>
       <div className="nav-auth">
-        <button className="logout-btn" onClick={() => {
-            localStorage.removeItem("token");
-            window.location.href = "/login";
-        }}>
+        <button
+          className="logout-btn"
+          onClick={() => {
+            // clear auth via context so state updates across app
+            logout();
+            navigate("/login");
+          }}
+        >
           <LogOut size={18} /> Logout
         </button>
       </div>

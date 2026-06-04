@@ -13,6 +13,8 @@ function Register() {
   });
 
   const navigate = useNavigate();
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+  const authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL || `${backendUrl}/auth`;
 
   useEffect(() => {
     setForm({ name: '', email: '', password: '', role: 'USER' });
@@ -25,7 +27,7 @@ function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:8080/auth/register', form);
+      await axios.post(`${authBaseUrl}/register`, form);
       alert('✅ Registration Successful!');
       navigate('/login');
     } catch (error) {
