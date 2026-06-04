@@ -24,6 +24,12 @@ public class Workshop_Controller {
         return service.save(serviceObj);
     }
 
+    @PutMapping("/{id}")
+    public Workshop_Entity update(@PathVariable Long id, @RequestBody Workshop_Entity obj) {
+        obj.setId(id);
+        return service.save(obj);
+    }
+
     @DeleteMapping("/{id}")
     public void delete(@PathVariable Long id) {
         service.delete(id);

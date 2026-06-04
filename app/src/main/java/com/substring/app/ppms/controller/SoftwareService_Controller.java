@@ -24,6 +24,12 @@ public class SoftwareService_Controller {
         return service.save(obj);
     }
 
+    @PutMapping("/{id}")
+    public SoftwareServices_Entity update(@PathVariable Long id, @RequestBody SoftwareServices_Entity obj) {
+        obj.setId(id);
+        return service.save(obj);  // JPA save() does upsert
+    }
+
     @DeleteMapping("/{id}")
     public void delete(@PathVariable Long id) {
         service.delete(id);

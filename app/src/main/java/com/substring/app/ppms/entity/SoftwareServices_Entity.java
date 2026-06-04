@@ -18,6 +18,9 @@ public class SoftwareServices_Entity {
     @Column(name = "service_name")
     private String service_name;
 
+    @Column(name = "Unit")
+    private String Unit;
+
 //    private String unit;
 
     @Column(name = "price")
