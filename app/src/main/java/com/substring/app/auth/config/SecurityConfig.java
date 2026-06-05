@@ -27,9 +27,12 @@ public class SecurityConfig {
                 // ✅ Explicit CORS Configuration
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
-                    config.setAllowedOrigins(List.of("http://localhost:5173")); // Your React App
+                    config.setAllowedOriginPatterns(List.of(
+                            "http://localhost:5173",
+                            "https://steady-gingersnap-8a9a89.netlify.app"
+                    ));
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-                    config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));
+                    config.setAllowedHeaders(List.of("*"));
                     config.setAllowCredentials(true); // Must match specific origin, not "*"
                     return config;
                 }))

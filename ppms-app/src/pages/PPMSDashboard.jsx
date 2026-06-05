@@ -224,6 +224,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
   /* ================= FETCH DATA WITH POLLING ================= */
   const fetchData = async () => {
     try {
+      console.log(`[API] Fetching from: ${BASE_URL}`);
       const results = await Promise.allSettled([
         axios.get(`${BASE_URL}/processor`),
         axios.get(`${BASE_URL}/memory`),
@@ -240,8 +241,14 @@ export default function PPMSDashboard({ isAdmin = false }) {
         axios.get(`${BASE_URL}/currency`),
       ]);
 
-      const getData = (index) =>
-        results[index].status === "fulfilled" ? results[index].value.data : [];
+      const getData = (index) => {
+        if (results[index].status === "fulfilled") {
+          return results[index].value.data;
+        } else if (results[index].status === "rejected") {
+          console.error(`[API Error at index ${index}]:`, results[index].reason?.message || results[index].reason);
+        }
+        return [];
+      };
 
       const p = getData(0); const m = getData(1); const i = getData(2);
       const g = getData(3); const kvm = getData(4); const pfs = getData(5);
@@ -254,6 +261,8 @@ export default function PPMSDashboard({ isAdmin = false }) {
       setMemoryList(m || []);
       setInterconnects(i || []);
       setGpuOptions((g || []).filter((item) => item.name !== null));
+
+      console.log(`[API] Data loaded - Processors: ${p?.length || 0}, Memory: ${m?.length || 0}, Services: ${services?.length || 0}, Workshops: ${workshop?.length || 0}`);
 
       if (currency && currency.length > 0) {
         const rateObj = currency.find((c) => c.currency_name === "USD");

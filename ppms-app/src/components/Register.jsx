@@ -27,11 +27,15 @@ function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${authBaseUrl}/register`, form);
+      console.log(`[Register] Submitting to: ${authBaseUrl}/register`, form);
+      const response = await axios.post(`${authBaseUrl}/register`, form);
+      console.log('[Register] Success:', response.data);
       alert('✅ Registration Successful!');
       navigate('/login');
     } catch (error) {
-      alert(error.response?.data || 'Registration failed');
+      console.error('[Register Error]:', error.message, error.response?.data);
+      const errorMsg = error.response?.data || error.message || 'Registration failed';
+      alert(errorMsg);
     }
   };
 

@@ -19,7 +19,9 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      console.log(`[Login] Submitting to: ${authBaseUrl}/login`);
       const res = await axios.post(`${authBaseUrl}/login`, form);
+      console.log('[Login] Success:', res.data);
 
       login(res.data.token, res.data.role);
 
@@ -30,7 +32,8 @@ function Login() {
         navigate('/dashboard');
       }
     } catch (err) {
-      alert('Invalid email or password');
+      console.error('[Login Error]:', err.message, err.response?.data);
+      alert(err.response?.data || 'Invalid email or password');
     }
   };
 
