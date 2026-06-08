@@ -27,10 +27,11 @@ public class SecurityConfig {
                 // ✅ Explicit CORS Configuration
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
-                    config.setAllowedOriginPatterns(List.of(
+                        config.setAllowedOriginPatterns(List.of(
                             "http://localhost:5173",
-                            "https://steady-gingersnap-8a9a89.netlify.app"
-                    ));
+                            "https://steady-gingersnap-8a9a89.netlify.app",
+                            "https://glowing-macaron-d153a4.netlify.app"
+                        ));
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                     config.setAllowedHeaders(List.of("*"));
                     config.setAllowCredentials(true); // Must match specific origin, not "*"
