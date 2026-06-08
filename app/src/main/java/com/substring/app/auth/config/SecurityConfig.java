@@ -30,7 +30,8 @@ public class SecurityConfig {
                         config.setAllowedOriginPatterns(List.of(
                             "http://localhost:5173",
                             "https://steady-gingersnap-8a9a89.netlify.app",
-                            "https://glowing-macaron-d153a4.netlify.app"
+                            "https://glowing-macaron-d153a4.netlify.app",
+                            "https://ppmsconfig.netlify.app"
                         ));
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                     config.setAllowedHeaders(List.of("*"));
