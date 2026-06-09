@@ -1443,40 +1443,8 @@ export default function PPMSDashboard({ isAdmin = false }) {
       )}
 
       {/* ========================================================= */}
-      {/* ================= TABLE RPEAK =========================== */}
+      {/* ================= CONFIG PANEL ========================== */}
       {/* ========================================================= */}
-      <h2>Table – RPeak Performance Summary</h2>
-      <table className="rpeak-table">
-        <thead>
-          <tr>
-            <th>Node Type</th><th>Quantity</th><th>RPeak (TFLOPS)</th>
-            <th>Formula Used <br />(base * cores * fpc * cpucount) / 1000</th><th>Total FLOPS</th>
-          </tr>
-        </thead>
-        <tbody>
-          {dynamicRpeak.map((row, idx) => (
-            <tr key={idx}>
-              <td>{row.label}</td>
-              <td>{row.qty}</td>
-              <td>{row.val.toFixed(2)}</td>
-              <td style={{ fontSize: "12px", maxWidth: "500px", wordBreak: "break-word" }} dangerouslySetInnerHTML={{ __html: row.formula }} />
-              <td>{(row.val * row.qty).toFixed(2)}</td>
-            </tr>
-          ))}
-          <tr style={{ background: "#dff0d8", fontWeight: "bold" }}>
-          <td colSpan="4">Total FLOPS</td>
-          <td>
-            {(() => {
-              const totalTflops = dynamicRpeak.reduce((sum, row) => sum + row.val * row.qty, 0);
-              if (totalTflops >= 1000) {
-                return `${(totalTflops / 1000).toFixed(2)} PFLOPS`;
-              }
-              return `${totalTflops.toFixed(2)} TFLOPS`;
-            })()}
-          </td>
-        </tr>
-        </tbody>
-      </table>
 
       {/* ========================================================= */}
       {/* ================= TABLE B =============================== */}
@@ -1604,6 +1572,43 @@ export default function PPMSDashboard({ isAdmin = false }) {
             </tr>
           </tfoot>
         )}
+      </table>
+
+      {/* ========================================================= */}
+      {/* ========================================================= */}
+      {/* ================= TABLE RPEAK =========================== */}
+      {/* ========================================================= */}
+      <h2>Table – RPeak Performance Summary</h2>
+      <table className="rpeak-table">
+        <thead>
+          <tr>
+            <th>Node Type</th><th>Quantity</th><th>RPeak (TFLOPS)</th>
+            <th>Formula Used <br />(base * cores * fpc * cpucount) / 1000</th><th>Total FLOPS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {dynamicRpeak.map((row, idx) => (
+            <tr key={idx}>
+              <td>{row.label}</td>
+              <td>{row.qty}</td>
+              <td>{row.val.toFixed(2)}</td>
+              <td style={{ fontSize: "12px", maxWidth: "500px", wordBreak: "break-word" }} dangerouslySetInnerHTML={{ __html: row.formula }} />
+              <td>{(row.val * row.qty).toFixed(2)}</td>
+            </tr>
+          ))}
+          <tr style={{ background: "#dff0d8", fontWeight: "bold" }}>
+          <td colSpan="4">Total FLOPS</td>
+          <td>
+            {(() => {
+              const totalTflops = dynamicRpeak.reduce((sum, row) => sum + row.val * row.qty, 0);
+              if (totalTflops >= 1000) {
+                return `${(totalTflops / 1000).toFixed(2)} PFLOPS`;
+              }
+              return `${totalTflops.toFixed(2)} TFLOPS`;
+            })()}
+          </td>
+        </tr>
+        </tbody>
       </table>
 
       {/* ========================================================= */}
