@@ -355,6 +355,28 @@ export default function PPMSDashboard({ isAdmin = false }) {
   const calculateSimpleCost = () =>
     simpleState.reduce((sum, state) => sum + (state?.selected?.price || 0) * state.qty, 0);
 
+  const getNodeUnitPrice = (node, isGpu = false) =>
+    Number(node.processor?.price || 0) + (isGpu ? Number(node.gpu?.price || 0) : 0);
+
+  const getNodeRpeakDisplay = (node, isGpu = false) => {
+    const cpuRpeak = Number(node.processor?.rpeak || 0);
+    const gpuRpeak = isGpu ? Number(node.gpu?.rpeak || 0) : 0;
+    if (isGpu) {
+      const parts = [];
+      if (cpuRpeak) parts.push(`CPU ${cpuRpeak} TF`);
+      if (gpuRpeak) parts.push(`GPU ${gpuRpeak} TF`);
+      return parts.length > 0 ? parts.join(" + ") : "Select Processor + GPU";
+    }
+    return cpuRpeak ? `${cpuRpeak} TF` : "Select Processor";
+  };
+
+  const tableATotal_INR =
+    getNodeUnitPrice(nodes.master) * nodes.master.qty +
+    getNodeUnitPrice(nodes.compute) * nodes.compute.qty +
+    getNodeUnitPrice(nodes.hm) * nodes.hm.qty +
+    getNodeUnitPrice(nodes.gpuNode, true) * nodes.gpuNode.qty +
+    calculateSimpleCost();
+
   const hardwareTotal_INR =
     calculateNodeCost(nodes.master) + calculateNodeCost(nodes.compute) +
     calculateNodeCost(nodes.hm) + calculateNodeCost(nodes.gpuNode) +
@@ -932,8 +954,8 @@ export default function PPMSDashboard({ isAdmin = false }) {
             <th>Component</th>
             <th>Selection</th>
             <th>Quantity</th>
-            <th>Action</th>
-            {isAdmin && <th>Admin Controls</th>}
+            <th>RPeak</th>
+            <th>Price</th>
           </tr>
         </thead>
         <tbody>
@@ -941,14 +963,79 @@ export default function PPMSDashboard({ isAdmin = false }) {
           {["master", "compute", "hm", "gpuNode"].map((key, i) => (
             <tr key={key}>
               <td>{["Master/Service Nodes", "Compute Node", "High Memory Node", "GPU Node"][i]}</td>
-              <td>{nodes[key].configured ? "✅ Configured" : "❌ Not Configured"}</td>
-              <td>{nodes[key].qty}</td>
               <td>
-                <button onClick={() => setActiveNode(key)}>
-                  {nodes[key].configured ? "Edit" : "Configure"}
-                </button>
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <select
+                      value={processors.findIndex((p) => p.id === nodes[key].processor?.id) >= 0 ? processors.findIndex((p) => p.id === nodes[key].processor?.id) : ''}
+                      onChange={(e) => {
+                        const selected = processors[Number(e.target.value)];
+                        setNodes((prev) => ({
+                          ...prev,
+                          [key]: {
+                            ...prev[key],
+                            processor: selected,
+                            configured: Boolean(selected && (key !== 'gpuNode' || prev[key].gpu)),
+                          },
+                        }));
+                      }}
+                      style={{ flex: 1, minWidth: '180px' }}
+                    >
+                      <option value="">Select Processor</option>
+                      {processors.map((p, idx) => (
+                        <option key={p.id || idx} value={idx} title={`₹${Number(p.price || 0).toLocaleString('en-IN')}`}>
+                          {p.model}
+                        </option>
+                      ))}
+                    </select>
+                    <span style={{ minWidth: '110px', fontSize: '12px', color: '#444' }}>
+                      {nodes[key].processor ? `₹${Number(nodes[key].processor.price || 0).toLocaleString('en-IN')}` : '-'}
+                    </span>
+                  </div>
+                  {key === 'gpuNode' && (
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <select
+                        value={gpuOptions.findIndex((g) => g.id === nodes[key].gpu?.id) >= 0 ? gpuOptions.findIndex((g) => g.id === nodes[key].gpu?.id) : ''}
+                        onChange={(e) => {
+                          const selected = gpuOptions[Number(e.target.value)];
+                          setNodes((prev) => ({
+                            ...prev,
+                            [key]: {
+                              ...prev[key],
+                              gpu: selected,
+                              configured: Boolean(prev[key].processor && selected),
+                            },
+                          }));
+                        }}
+                        style={{ flex: 1, minWidth: '180px' }}
+                      >
+                        <option value="">Select GPU</option>
+                        {gpuOptions.map((g, idx) => (
+                          <option key={g.id || idx} value={idx} title={`₹${Number(g.price || 0).toLocaleString('en-IN')}`}>
+                            {g.name || g.model}
+                          </option>
+                        ))}
+                      </select>
+                      <span style={{ minWidth: '110px', fontSize: '12px', color: '#444' }}>
+                        {nodes[key].gpu ? `₹${Number(nodes[key].gpu.price || 0).toLocaleString('en-IN')}` : '-'}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </td>
-              {isAdmin && <td>-</td>}
+              <td>
+                <input
+                  type="number"
+                  min="1"
+                  value={nodes[key].qty}
+                  onChange={(e) => {
+                    const value = Number(e.target.value) || 1;
+                    setNodes((prev) => ({ ...prev, [key]: { ...prev[key], qty: value } }));
+                  }}
+                />
+              </td>
+              <td>{getNodeRpeakDisplay(nodes[key], key === 'gpuNode')}</td>
+              <td>{getNodeUnitPrice(nodes[key], key === 'gpuNode') > 0 ? `₹${getNodeUnitPrice(nodes[key], key === 'gpuNode').toLocaleString('en-IN')}` : '-'}</td>
             </tr>
           ))}
 
