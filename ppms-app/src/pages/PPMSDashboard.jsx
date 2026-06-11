@@ -115,7 +115,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
   const [processorForm, setProcessorForm] = useState({
     id: null, manufacturer: "", model: "", architecture: "",
     cpus_per_node: "", cores_per_cpu: "", total_cores: "",
-    base_ghz: "", l3Cache: "", memoryType: "", pcie_gen: "",
+    base_ghz: "", l3Cache: "", memory: "", interconnect: "", pcie_gen: "",
     tdp_watt: "", price: "", rpeak: "", FLOPSPerCycle: "",
   });
 
@@ -500,7 +500,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
         architecture: item.architecture || "", cpus_per_node: item.cpus_per_node || "",
         cores_per_cpu: item.cores_per_cpu || "", total_cores: item.total_cores || "",
         base_ghz: item.base_ghz || "", l3Cache: item.l3Cache || "",
-        memoryType: item.memoryType || "", pcie_gen: item.pcie_gen || "",
+        memory: item.memory || "", interconnect: item.interconnect || "", pcie_gen: item.pcie_gen || "",
         tdp_watt: item.tdp_watt || "", price: item.price || "",
         rpeak: item.rpeak || "", FLOPSPerCycle: item.FLOPSPerCycle || "",
       });
@@ -613,8 +613,8 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
   /* ================= PROCESSOR CRUD ================= */
   const saveProcessor = async () => {
-    const { manufacturer, model, architecture, cpus_per_node, cores_per_cpu, total_cores, base_ghz, l3Cache, memoryType, pcie_gen, tdp_watt, price, rpeak, FLOPSPerCycle } = processorForm;
-    if (!manufacturer || !model || !architecture || !cpus_per_node || !cores_per_cpu || !total_cores || !base_ghz || !l3Cache || !memoryType || !pcie_gen || !tdp_watt || !price || !rpeak || !FLOPSPerCycle) {
+    const { manufacturer, model, architecture, cpus_per_node, cores_per_cpu, total_cores, base_ghz, l3Cache, memory, interconnect, pcie_gen, tdp_watt, price, rpeak, FLOPSPerCycle } = processorForm;
+    if (!manufacturer || !model || !architecture || !cpus_per_node || !cores_per_cpu || !total_cores || !base_ghz || !l3Cache || !memory || !interconnect || !pcie_gen || !tdp_watt || !price || !rpeak || !FLOPSPerCycle) {
       alert("Please fill all fields before saving."); return;
     }
     try {
@@ -629,7 +629,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
     } catch (err) { console.error(err); alert("Error Saving Processor"); }
   };
   const resetProcessorForm = () => {
-    setProcessorForm({ id: null, manufacturer: "", model: "", architecture: "", cpus_per_node: "", cores_per_cpu: "", total_cores: "", base_ghz: "", l3Cache: "", memoryType: "", tdp_watt: "", price: "", rpeak: "", FLOPSPerCycle: "" });
+    setProcessorForm({ id: null, manufacturer: "", model: "", architecture: "", cpus_per_node: "", cores_per_cpu: "", total_cores: "", base_ghz: "", l3Cache: "", memory: "", interconnect: "", tdp_watt: "", price: "", rpeak: "", FLOPSPerCycle: "" });
     setIsEditMode(false);
   };
 
@@ -945,6 +945,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
     <div className="container">
 
       {/* ========================================================= */}
+      
       {/* ================= TABLE A =============================== */}
       {/* ========================================================= */}
       <h2>Table A – System Configuration</h2>
@@ -959,13 +960,14 @@ export default function PPMSDashboard({ isAdmin = false }) {
           </tr>
         </thead>
         <tbody>
+          
           {/* ================= NODE CONFIG ROWS ================= */}
           {["master", "compute", "hm", "gpuNode"].map((key, i) => (
             <tr key={key}>
               <td>{["Master/Service Nodes", "Compute Node", "High Memory Node", "GPU Node"][i]}</td>
               <td>
-                <div style={{ display: 'grid', gap: '10px' }}>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <select
                       value={processors.findIndex((p) => p.id === nodes[key].processor?.id) >= 0 ? processors.findIndex((p) => p.id === nodes[key].processor?.id) : ''}
                       onChange={(e) => {
@@ -979,21 +981,28 @@ export default function PPMSDashboard({ isAdmin = false }) {
                           },
                         }));
                       }}
-                      style={{ flex: 1, minWidth: '180px' }}
+                      style={{ flex: 1, minWidth: 0 }}
                     >
                       <option value="">Select Processor</option>
                       {processors.map((p, idx) => (
-                        <option key={p.id || idx} value={idx} title={`₹${Number(p.price || 0).toLocaleString('en-IN')}`}>
+                        <option 
+                          key={p.id || idx} 
+                          value={idx} 
+                          title={`Manufacturer: ${p.manufacturer || ''}\nModel: ${p.model || ''}\nArchitecture: ${p.architecture || ''}\nCPUs Per Node: ${p.cpus_per_node || ''}\nCores Per CPU: ${p.cores_per_cpu || ''}\nTotal Cores: ${p.total_cores || ''}\nBase GHz: ${p.base_ghz || ''}\nL3 Cache: ${p.l3Cache || ''}\nMemory: ${p.memory || ''}\nInterconnect: ${p.interconnect || ''}\nPCIe Gen: ${p.pcie_gen || ''}\nTDP Watt: ${p.tdp_watt || ''}\nPrice: ₹${Number(p.price || 0).toLocaleString('en-IN')}\nRPeak: ${p.rpeak || ''} TF\nFLOPS Per Cycle: ${p.FLOPSPerCycle || ''}`}
+                        >
                           {p.model}
                         </option>
                       ))}
                     </select>
-                    <span style={{ minWidth: '110px', fontSize: '12px', color: '#444' }}>
-                      {nodes[key].processor ? `₹${Number(nodes[key].processor.price || 0).toLocaleString('en-IN')}` : '-'}
-                    </span>
+                    {isAdmin && (
+                      <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+                        <button style={btnStyle("green")} onClick={() => { resetProcessorForm(); setIsEditMode(false); setShowProcessorForm(true); }}>Add</button>
+                        <button style={btnStyle("orange")} onClick={() => openEditPicker("processor")}>Edit</button>
+                      </div>
+                    )}
                   </div>
                   {key === 'gpuNode' && (
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                       <select
                         value={gpuOptions.findIndex((g) => g.id === nodes[key].gpu?.id) >= 0 ? gpuOptions.findIndex((g) => g.id === nodes[key].gpu?.id) : ''}
                         onChange={(e) => {
@@ -1007,18 +1016,25 @@ export default function PPMSDashboard({ isAdmin = false }) {
                             },
                           }));
                         }}
-                        style={{ flex: 1, minWidth: '180px' }}
+                        style={{ flex: 1, minWidth: 0 }}
                       >
                         <option value="">Select GPU</option>
                         {gpuOptions.map((g, idx) => (
-                          <option key={g.id || idx} value={idx} title={`₹${Number(g.price || 0).toLocaleString('en-IN')}`}>
+                          <option 
+                            key={g.id || idx} 
+                            value={idx} 
+                            title={`GPU: ${g.name || ''}\nManufacturer: ${g.manufacturer || ''}\nArchitecture: ${g.architecture || ''}\nGPUs Per Node: ${g.gpusPerNode || ''}\nFP64: ${g.fp64 || ''}\nGPU Memory: ${g.gpuMemory || ''}\nInterconnect: ${g.interconnect || ''}\nRPeak: ${g.rpeak || ''} TF\nPrice: ₹${Number(g.price || 0).toLocaleString('en-IN')}`}
+                          >
                             {g.name || g.model}
                           </option>
                         ))}
                       </select>
-                      <span style={{ minWidth: '110px', fontSize: '12px', color: '#444' }}>
-                        {nodes[key].gpu ? `₹${Number(nodes[key].gpu.price || 0).toLocaleString('en-IN')}` : '-'}
-                      </span>
+                      {isAdmin && (
+                        <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+                          <button style={btnStyle("green")} onClick={() => { resetGpuForm(); setIsGpuEditMode(false); setShowGpuForm(true); }}>Add</button>
+                          <button style={btnStyle("orange")} onClick={() => openEditPicker("gpu")}>Edit</button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1045,27 +1061,36 @@ export default function PPMSDashboard({ isAdmin = false }) {
               <tr key={i}>
                 <td>{comp.name}</td>
                 <td>
-                  <select
-                    value={
-                      simpleState[i]?.selected
-                        ? simpleState[i].selected.product_name || simpleState[i].selected.name
-                        : ""
-                    }
-                    onChange={(e) => {
-                      const opt = comp.options.find((o) => (o.product_name || o.name) === e.target.value);
-                      const updated = [...simpleState];
-                      if (!updated[i]) updated[i] = { selected: null, qty: 1 };
-                      updated[i].selected = opt;
-                      setSimpleState(updated);
-                    }}
-                  >
-                    <option value="">Select Option</option>
-                    {comp.options.map((o, idx) => (
-                      <option key={idx} value={o.product_name || o.name} title={comp.getHover ? comp.getHover(o) : ""}>
-                        {o.product_name || o.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <select
+                      value={
+                        simpleState[i]?.selected
+                          ? simpleState[i].selected.product_name || simpleState[i].selected.name
+                          : ""
+                      }
+                      onChange={(e) => {
+                        const opt = comp.options.find((o) => (o.product_name || o.name) === e.target.value);
+                        const updated = [...simpleState];
+                        if (!updated[i]) updated[i] = { selected: null, qty: 1 };
+                        updated[i].selected = opt;
+                        setSimpleState(updated);
+                      }}
+                      style={{ flex: 1, minWidth: 0 }}
+                    >
+                      <option value="">Select Option</option>
+                      {comp.options.map((o, idx) => (
+                        <option key={idx} value={o.product_name || o.name} title={comp.getHover ? comp.getHover(o) : ""}>
+                          {o.product_name || o.name}
+                        </option>
+                      ))}
+                    </select>
+                    {isAdmin && (
+                      <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+                        <button style={btnStyle("green")} onClick={() => openAddForm(comp.name)}>Add</button>
+                        <button style={btnStyle("orange")} onClick={() => openEditPicker(comp.pickerType)}>Edit</button>
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td>
                   <input
@@ -1079,15 +1104,28 @@ export default function PPMSDashboard({ isAdmin = false }) {
                   />
                 </td>
                 <td>-</td>
-                {isAdmin && (
-                  <td>
-                    <button style={btnStyle("green")} onClick={() => openAddForm(comp.name)}>Add</button>
-                    <button style={btnStyle("orange")} onClick={() => openEditPicker(comp.pickerType)}>Edit</button>
-                  </td>
-                )}
+                <td>
+                  {simpleState[i]?.selected?.price > 0 
+                    ? `₹${Number(simpleState[i].selected.price || 0).toLocaleString('en-IN')}` 
+                    : '-'}
+                </td>
               </tr>
             ))}
         </tbody>
+        <tfoot>
+          <tr style={{ background: '#dff0d8', fontWeight: 'bold', borderTop: '2px solid #b2d8b2' }}>
+            <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px', fontSize: '14px', color: '#1a1a1a' }}>
+              Table A – Total Hardware Price
+            </td>
+            <td></td>
+            <td></td>
+            <td style={{ fontSize: '14px', color: '#1a5c1a' }}>
+              {hardwareTotal_INR > 0
+                ? `₹${hardwareTotal_INR.toLocaleString('en-IN')}`
+                : '-'}
+            </td>
+          </tr>
+        </tfoot>
       </table>
 
       {/* ========================================================= */}
@@ -1100,34 +1138,38 @@ export default function PPMSDashboard({ isAdmin = false }) {
 
             {/* PROCESSOR */}
             <label>Processor:</label>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <select
                 value={processors.findIndex((p) => p.model === nodes[activeNode].processor?.model)}
                 onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], processor: processors[e.target.value] } })}
-                style={{ flex: 1 }}
+                style={{ flex: 1, minWidth: 0 }}
               >
                 <option value="-1">Select Processor</option>
                 {processors.map((p, i) => (
-                  <option key={i} value={i} title={`Model: ${p.model}\nBase GHz: ${p.base_ghz}\nCPUs Per Node: ${p.cpus_per_node}\nArchitecture: ${p.architecture}\nrpeak: ${p.rpeak}\nFLOPSPerCycle: ${p.FLOPSPerCycle}\nCores Per CPU: ${p.cores_per_cpu}`}>
+                  <option 
+                    key={i} 
+                    value={i} 
+                    title={`Manufacturer: ${p.manufacturer || ''}\nModel: ${p.model || ''}\nArchitecture: ${p.architecture || ''}\nCPUs Per Node: ${p.cpus_per_node || ''}\nCores Per CPU: ${p.cores_per_cpu || ''}\nTotal Cores: ${p.total_cores || ''}\nBase GHz: ${p.base_ghz || ''}\nL3 Cache: ${p.l3Cache || ''}\nMemory: ${p.memory || ''}\nInterconnect: ${p.interconnect || ''}\nPCIe Gen: ${p.pcie_gen || ''}\nTDP Watt: ${p.tdp_watt || ''}\nPrice: ₹${Number(p.price || 0).toLocaleString('en-IN')}\nRPeak: ${p.rpeak || ''} TF\nFLOPS Per Cycle: ${p.FLOPSPerCycle || ''}`}
+                  >
                     {p.model}
                   </option>
                 ))}
               </select>
               {isAdmin && (
-                <>
+                <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
                   <button style={btnStyle("green")} onClick={() => { resetProcessorForm(); setIsEditMode(false); setShowProcessorForm(true); }}>Add</button>
                   <button style={btnStyle("orange")} onClick={() => openEditPicker("processor")}>Edit</button>
-                </>
+                </div>
               )}
             </div>
 
             {/* MEMORY */}
             <label>Memory:</label>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <select
                 value={memoryList.findIndex((m) => m.memory_type === nodes[activeNode].memory?.memory_type)}
                 onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], memory: memoryList[e.target.value] } })}
-                style={{ flex: 1 }}
+                style={{ flex: 1, minWidth: 0 }}
               >
                 <option value="-1">Select Memory</option>
                 {memoryList.map((m, i) => (
@@ -1137,20 +1179,20 @@ export default function PPMSDashboard({ isAdmin = false }) {
                 ))}
               </select>
               {isAdmin && (
-                <>
+                <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
                   <button style={btnStyle("green")} onClick={() => { resetMemoryForm(); setIsMemoryEditMode(false); setShowMemoryForm(true); }}>Add</button>
                   <button style={btnStyle("orange")} onClick={() => openEditPicker("memory")}>Edit</button>
-                </>
+                </div>
               )}
             </div>
 
             {/* INTERCONNECT */}
             <label>Interconnect:</label>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
               <select
                 value={interconnects.findIndex((inter) => inter.product_name === nodes[activeNode].interconnect?.product_name)}
                 onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], interconnect: interconnects[e.target.value] } })}
-                style={{ flex: 1 }}
+                style={{ flex: 1, minWidth: 0 }}
               >
                 <option value="-1">Select Interconnect</option>
                 {interconnects.map((inter, idx) => (
@@ -1160,10 +1202,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
                 ))}
               </select>
               {isAdmin && (
-                <>
+                <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
                   <button style={btnStyle("green")} onClick={() => { resetInterconnectForm(); setIsInterconnectEditMode(false); setShowInterconnectForm(true); }}>Add</button>
                   <button style={btnStyle("orange")} onClick={() => openEditPicker("interconnect")}>Edit</button>
-                </>
+                </div>
               )}
             </div>
 
@@ -1171,24 +1213,28 @@ export default function PPMSDashboard({ isAdmin = false }) {
             {activeNode === "gpuNode" && (
               <>
                 <label>GPU:</label>
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                   <select
                     value={gpuOptions.findIndex((g) => g.name === nodes[activeNode].gpu?.name)}
                     onChange={(e) => setNodes({ ...nodes, [activeNode]: { ...nodes[activeNode], gpu: gpuOptions[e.target.value] } })}
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, minWidth: 0 }}
                   >
                     <option value="-1">Select GPU</option>
                     {gpuOptions.map((g, idx) => (
-                      <option key={idx} value={idx} title={`GPU: ${g.name}\nArchitecture: ${g.architecture}\nGPUs Per Node: ${g.gpusPerNode}\nFP64: ${g.fp64}\nGPU Memory: ${g.gpuMemory}\nInterconnect: ${g.interconnect}\nRPeak: ${g.rpeak}\nManufacturer: ${g.manufacturer}`}>
+                      <option 
+                        key={idx} 
+                        value={idx} 
+                        title={`GPU: ${g.name || ''}\nManufacturer: ${g.manufacturer || ''}\nArchitecture: ${g.architecture || ''}\nGPUs Per Node: ${g.gpusPerNode || ''}\nFP64: ${g.fp64 || ''}\nGPU Memory: ${g.gpuMemory || ''}\nInterconnect: ${g.interconnect || ''}\nRPeak: ${g.rpeak || ''} TF\nPrice: ₹${Number(g.price || 0).toLocaleString('en-IN')}`}
+                      >
                         {g.name || g.model}
                       </option>
                     ))}
                   </select>
                   {isAdmin && (
-                    <>
+                    <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
                       <button style={btnStyle("green")} onClick={() => { resetGpuForm(); setIsGpuEditMode(false); setShowGpuForm(true); }}>Add</button>
                       <button style={btnStyle("orange")} onClick={() => openEditPicker("gpu")}>Edit</button>
-                    </>
+                    </div>
                   )}
                 </div>
               </>
@@ -1359,7 +1405,8 @@ export default function PPMSDashboard({ isAdmin = false }) {
           <input type="number" placeholder="Total Cores" value={processorForm.total_cores} onChange={(e) => setProcessorForm({ ...processorForm, total_cores: e.target.value })} />
           <input type="number" step="0.1" placeholder="Base GHz" value={processorForm.base_ghz} onChange={(e) => setProcessorForm({ ...processorForm, base_ghz: e.target.value })} />
           <input placeholder="L3 Cache" value={processorForm.l3Cache} onChange={(e) => setProcessorForm({ ...processorForm, l3Cache: e.target.value })} />
-          <input placeholder="Memory Type" value={processorForm.memoryType} onChange={(e) => setProcessorForm({ ...processorForm, memoryType: e.target.value })} />
+          <input placeholder="Memory" value={processorForm.memory} onChange={(e) => setProcessorForm({ ...processorForm, memory: e.target.value })} />
+          <input placeholder="Interconnect" value={processorForm.interconnect} onChange={(e) => setProcessorForm({ ...processorForm, interconnect: e.target.value })} />
           <input placeholder="PCIe Gen" value={processorForm.pcie_gen} onChange={(e) => setProcessorForm({ ...processorForm, pcie_gen: e.target.value })} />
           <input placeholder="TDP Watt" value={processorForm.tdp_watt} onChange={(e) => setProcessorForm({ ...processorForm, tdp_watt: e.target.value })} />
           <input type="number" placeholder="Price" value={processorForm.price} onChange={(e) => setProcessorForm({ ...processorForm, price: e.target.value })} />

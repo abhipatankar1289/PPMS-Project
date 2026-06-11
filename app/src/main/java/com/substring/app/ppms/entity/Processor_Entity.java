@@ -48,4 +48,8 @@ public class Processor_Entity {
     @JsonProperty("FLOPSPerCycle")
     @Column(name = "`FLOPS/Cycle(DP)`")
     private Double FLOPSPerCycle;
+
+    private String memory;
+
+    private String interconnect;
 }
