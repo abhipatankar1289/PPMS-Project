@@ -388,25 +388,30 @@ export default function PPMSDashboard({ isAdmin = false }) {
   const [tableBQty, setTableBQty] = useState({});  // { [id]: qty }
   const [tableCQty, setTableCQty] = useState({});  // { [id]: qty }
 
+  const [tableBSelected, setTableBSelected] = useState({});
+const [tableCSelected, setTableCSelected] = useState({});
+
   // Derived rows — always in sync with the latest fetch
   const tableB = serviceList.map((s) => ({
-    id: s.id,
-    name: s.service_name,
-    price: s.price || 0,
-    unit: s.unit || s.unit_type || s.service_unit || "",
-    qty: tableBQty[s.id] ?? 1,
-  }));
+  id: s.id,
+  name: s.service_name,
+  price: Number(s.price) || 0,
+  unit: s.unit || s.unit_type || s.service_unit || "",
+  qty: tableBQty[s.id] ?? 1,
+  selected: tableBSelected[s.id] ?? true,
+}));
 
-  const tableC = workshopList.map((w) => ({
-    id: w.id,
-    name: w.service_name,
-    unit: w.unit || w.unit_type || w.service_unit || "",
-    price: w.price || 0,
-    qty: tableCQty[w.id] ?? 1,
-  }));
+const tableC = workshopList.map((w) => ({
+  id: w.id,
+  name: w.service_name,
+  unit: w.unit || w.unit_type || w.service_unit || "",
+  price: Number(w.price) || 0,
+  qty: tableCQty[w.id] ?? 1,
+  selected: tableCSelected[w.id] ?? true,
+}));
 
-  const totalB_INR = tableB.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const totalC_INR = tableC.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const totalB_INR = tableB.reduce((sum, item) => sum + (item.selected ? item.price * item.qty : 0), 0);
+  const totalC_INR = tableC.reduce((sum, item) => sum + (item.selected ? item.price * item.qty : 0), 0);
   const grandTotal_INR = hardwareTotal_INR + totalB_INR + totalC_INR;
   const grandTotal_USD = Math.round(grandTotal_INR / usdRate);
 
@@ -915,9 +920,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
         nodeRows.push([comp.name, simpleState[i]?.selected?.product_name || simpleState[i]?.selected?.name || "None Selected", simpleState[i]?.qty || 0]);
       });
       callAutoTable(doc, { startY: 40, head: [["Component", "Selected Model", "Qty"]], body: nodeRows, theme: "striped", headStyles: { fillColor: [44, 62, 80] } });
-      const serviceRows = [...tableB, ...tableC].map((item) => {
-        return [item.name, "-", item.qty, item.price.toLocaleString("en-IN"), (item.price * item.qty).toLocaleString("en-IN")];
-      });
+      // Inside generatePDF(), replace the serviceRows line:
+        const serviceRows = [...tableB.filter(i => i.selected), ...tableC.filter(i => i.selected)].map((item) => {
+          return [item.name, "-", item.qty, item.price.toLocaleString("en-IN"), (item.price * item.qty).toLocaleString("en-IN")];
+        });
       callAutoTable(doc, { startY: doc.lastAutoTable.finalY + 10, head: [["Service Details", "Unit", "Qty", "Unit Price", "Total (INR)"]], body: serviceRows, theme: "grid", headStyles: { fillColor: [52, 73, 94] } });
       const summaryRows = [
         ["Hardware Total", `Rs. ${hardwareTotal_INR.toLocaleString("en-IN")}`],
@@ -1051,7 +1057,7 @@ export default function PPMSDashboard({ isAdmin = false }) {
                 />
               </td>
               <td>{getNodeRpeakDisplay(nodes[key], key === 'gpuNode')}</td>
-              <td>{getNodeUnitPrice(nodes[key], key === 'gpuNode') > 0 ? `₹${getNodeUnitPrice(nodes[key], key === 'gpuNode').toLocaleString('en-IN')}` : '-'}</td>
+              <td>{getNodeUnitPrice(nodes[key], key === 'gpuNode') > 0 ? `₹${(getNodeUnitPrice(nodes[key], key === 'gpuNode') * nodes[key].qty).toLocaleString('en-IN')}` : '-'}</td>
             </tr>
           ))}
 
@@ -1105,10 +1111,10 @@ export default function PPMSDashboard({ isAdmin = false }) {
                 </td>
                 <td>-</td>
                 <td>
-                  {simpleState[i]?.selected?.price > 0 
-                    ? `₹${Number(simpleState[i].selected.price || 0).toLocaleString('en-IN')}` 
-                    : '-'}
-                </td>
+                    {simpleState[i]?.selected?.price > 0 
+                      ? `₹${(Number(simpleState[i].selected.price || 0) * (simpleState[i]?.qty || 1)).toLocaleString('en-IN')}` 
+                      : '-'}
+                  </td>
               </tr>
             ))}
         </tbody>
@@ -1581,132 +1587,172 @@ export default function PPMSDashboard({ isAdmin = false }) {
       {/* ========================================================= */}
 
       {/* ========================================================= */}
-      {/* ================= TABLE B =============================== */}
       {/* ========================================================= */}
-      <h2>Table B – Software Solutions &amp; Services</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Service Details</th>
-            <th>Unit</th>
-            <th>Qty</th>
-            <th>Price</th>
-            <th>Total</th>
-            {isAdmin && <th>Admin Controls</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {tableB.map((item) => {
-            return (
-              <tr key={item.id}>
-                <td>{item.name}</td>
-                <td>{item.unit || "-"}</td>
-                <td>
-                  <input
-                    type="number" min="1" value={item.qty}
-                    onChange={(e) =>
-                      setTableBQty((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
-                    }
-                  />
-                </td>
-                <td>{item.price.toLocaleString("en-IN")}</td>
-                <td>{(item.price * item.qty).toLocaleString("en-IN")}</td>
-                {/* No per-row buttons — single Add/Edit row below */}
-                {isAdmin && <td>-</td>}
-              </tr>
-            );
-          })}
-        </tbody>
+{/* ========================================================= */}
+{/* ================= TABLE B =============================== */}
+{/* ========================================================= */}
+<h2>Table B – Software Solutions &amp; Services</h2>
+<table>
+  <thead>
+    <tr>
+      <th style={{ width: "50px" }}>Select</th>
+      <th>Service Details</th>
+      <th>Unit</th>
+      <th>Qty</th>
+      <th>Price (₹)</th>
+      <th>Total (₹)</th>
+      {isAdmin && <th>Admin Controls</th>}
+    </tr>
+  </thead>
+  <tbody>
+    {tableB.map((item) => (
+      <tr key={item.id}>
+        <td style={{ textAlign: "center" }}>
+          <input
+            type="checkbox"
+            checked={item.selected}
+            style={{ width: "14px", height: "14px", cursor: "pointer", accentColor: "#1976d2" }}
+            onChange={(e) =>
+              setTableBSelected((prev) => ({ ...prev, [item.id]: e.target.checked }))
+            }
+          />
+        </td>
+        <td style={{ color: item.selected ? "inherit" : "#aaa", textDecoration: item.selected ? "none" : "line-through" }}>
+          {item.name}
+        </td>
+        <td style={{ color: item.selected ? "inherit" : "#aaa", textDecoration: item.selected ? "none" : "line-through" }}>
+          {item.unit || "-"}
+        </td>
+        <td>
+          <input
+            type="number" min="1" value={item.qty}
+            disabled={!item.selected}
+            style={{ opacity: item.selected ? 1 : 0.4 }}
+            onChange={(e) =>
+              setTableBQty((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
+            }
+          />
+        </td>
+        <td style={{ color: item.selected ? "inherit" : "#aaa", textDecoration: item.selected ? "none" : "line-through" }}>
+          {item.price.toLocaleString("en-IN")}
+        </td>
+        <td style={{ color: item.selected ? "#1a5c1a" : "#aaa", fontWeight: item.selected ? "600" : "normal", textDecoration: item.selected ? "none" : "line-through" }}>
+          {item.selected ? (item.price * item.qty).toLocaleString("en-IN") : "-"}
+        </td>
+        {isAdmin && <td>-</td>}
+      </tr>
+    ))}
+  </tbody>
+  <tfoot>
+    <tr style={{ background: "#dff0d8", fontWeight: "bold", borderTop: "2px solid #b2d8b2" }}>
+      <td colSpan="5" style={{ textAlign: "right", paddingRight: "16px", fontSize: "14px", color: "#1a1a1a" }}>
+        Table B – Total Software &amp; Services Price
+      </td>
+      <td style={{ fontSize: "14px", color: "#1a5c1a" }}>
+        {totalB_INR > 0 ? `₹${totalB_INR.toLocaleString("en-IN")}` : "-"}
+      </td>
+      {isAdmin && <td></td>}
+    </tr>
+    {isAdmin && (
+      <tr>
+        <td colSpan="5" style={{ textAlign: "right", paddingRight: "12px", fontWeight: "600", color: "#555" }}>
+          Manage Software Services:
+        </td>
+        <td colSpan="2">
+          <button style={btnStyle("green")} onClick={() => { resetServiceForm(); setIsServiceEditMode(false); setShowServiceForm(true); }}>
+            ➕ Add
+          </button>
+          <button style={btnStyle("orange")} onClick={() => openEditPicker("service")}>
+            ✏️ Edit / Delete
+          </button>
+        </td>
+      </tr>
+    )}
+  </tfoot>
+</table>
 
-        {/* ── Single Admin Controls row at the bottom of Table B ── */}
-        {isAdmin && (
-          <tfoot>
-            <tr>
-              <td colSpan="4" style={{ textAlign: "right", paddingRight: "12px", fontWeight: "600", color: "#555" }}>
-                Manage Software Services:
-              </td>
-              <td colSpan="2">
-                <button
-                  style={btnStyle("green")}
-                  onClick={() => { resetServiceForm(); setIsServiceEditMode(false); setShowServiceForm(true); }}
-                >
-                  ➕ Add
-                </button>
-                <button
-                  style={btnStyle("orange")}
-                  onClick={() => openEditPicker("service")}
-                >
-                  ✏️ Edit / Delete
-                </button>
-              </td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
-
-      {/* ========================================================= */}
-      {/* ================= TABLE C =============================== */}
-      {/* ========================================================= */}
-      <h2>Table C – CDAC Add-on Services</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Service Details</th>
-            <th>Unit</th>
-            <th>Qty</th>
-            <th>Price</th>
-            <th>Total</th>
-            {isAdmin && <th>Admin Controls</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {tableC.map((item) => {
-            return (
-              <tr key={item.id}>
-                <td>{item.name}</td>
-                <td>{item.unit || "-"}</td>
-                <td>
-                  <input
-                    type="number" min="1" value={item.qty}
-                    onChange={(e) =>
-                      setTableCQty((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
-                    }
-                  />
-                </td>
-                <td>{item.price.toLocaleString("en-IN")}</td>
-                <td>{(item.price * item.qty).toLocaleString("en-IN")}</td>
-                {/* No per-row buttons — single Add/Edit row below */}
-                {isAdmin && <td>-</td>}
-              </tr>
-            );
-          })}
-        </tbody>
-
-        {/* ── Single Admin Controls row at the bottom of Table C ── */}
-        {isAdmin && (
-          <tfoot>
-            <tr>
-              <td colSpan="4" style={{ textAlign: "right", paddingRight: "12px", fontWeight: "600", color: "#555" }}>
-                Manage Add-on Services:
-              </td>
-              <td colSpan="2">
-                <button
-                  style={btnStyle("green")}
-                  onClick={() => { resetWorkshopForm(); setIsWorkshopEditMode(false); setShowWorkshopForm(true); }}
-                >
-                  ➕ Add
-                </button>
-                <button
-                  style={btnStyle("orange")}
-                  onClick={() => openEditPicker("workshop")}
-                >
-                  ✏️ Edit / Delete
-                </button>
-              </td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
+{/* ========================================================= */}
+{/* ================= TABLE C =============================== */}
+{/* ========================================================= */}
+<h2>Table C – CDAC Add-on Services</h2>
+<table>
+  <thead>
+    <tr>
+      <th style={{ width: "50px" }}>Select</th>
+      <th>Service Details</th>
+      <th>Unit</th>
+      <th>Qty</th>
+      <th>Price (₹)</th>
+      <th>Total (₹)</th>
+      {isAdmin && <th>Admin Controls</th>}
+    </tr>
+  </thead>
+  <tbody>
+    {tableC.map((item) => (
+      <tr key={item.id}>
+        <td style={{ textAlign: "center" }}>
+          <input
+            type="checkbox"
+            checked={item.selected}
+            style={{ width: "14px", height: "14px", cursor: "pointer", accentColor: "#1976d2" }}
+            onChange={(e) =>
+              setTableCSelected((prev) => ({ ...prev, [item.id]: e.target.checked }))
+            }
+          />
+        </td>
+        <td style={{ color: item.selected ? "inherit" : "#aaa", textDecoration: item.selected ? "none" : "line-through" }}>
+          {item.name}
+        </td>
+        <td style={{ color: item.selected ? "inherit" : "#aaa", textDecoration: item.selected ? "none" : "line-through" }}>
+          {item.unit || "-"}
+        </td>
+        <td>
+          <input
+            type="number" min="1" value={item.qty}
+            disabled={!item.selected}
+            style={{ opacity: item.selected ? 1 : 0.4 }}
+            onChange={(e) =>
+              setTableCQty((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
+            }
+          />
+        </td>
+        <td style={{ color: item.selected ? "inherit" : "#aaa", textDecoration: item.selected ? "none" : "line-through" }}>
+          {item.price.toLocaleString("en-IN")}
+        </td>
+        <td style={{ color: item.selected ? "#1a5c1a" : "#aaa", fontWeight: item.selected ? "600" : "normal", textDecoration: item.selected ? "none" : "line-through" }}>
+          {item.selected ? (item.price * item.qty).toLocaleString("en-IN") : "-"}
+        </td>
+        {isAdmin && <td>-</td>}
+      </tr>
+    ))}
+  </tbody>
+  <tfoot>
+    <tr style={{ background: "#dff0d8", fontWeight: "bold", borderTop: "2px solid #b2d8b2" }}>
+      <td colSpan="5" style={{ textAlign: "right", paddingRight: "16px", fontSize: "14px", color: "#1a1a1a" }}>
+        Table C – Total Add-on Services Price
+      </td>
+      <td style={{ fontSize: "14px", color: "#1a5c1a" }}>
+        {totalC_INR > 0 ? `₹${totalC_INR.toLocaleString("en-IN")}` : "-"}
+      </td>
+      {isAdmin && <td></td>}
+    </tr>
+    {isAdmin && (
+      <tr>
+        <td colSpan="5" style={{ textAlign: "right", paddingRight: "12px", fontWeight: "600", color: "#555" }}>
+          Manage Add-on Services:
+        </td>
+        <td colSpan="2">
+          <button style={btnStyle("green")} onClick={() => { resetWorkshopForm(); setIsWorkshopEditMode(false); setShowWorkshopForm(true); }}>
+            ➕ Add
+          </button>
+          <button style={btnStyle("orange")} onClick={() => openEditPicker("workshop")}>
+            ✏️ Edit / Delete
+          </button>
+        </td>
+      </tr>
+    )}
+  </tfoot>
+</table>
 
       {/* ========================================================= */}
       {/* ========================================================= */}
