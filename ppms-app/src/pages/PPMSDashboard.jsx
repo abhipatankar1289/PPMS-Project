@@ -1818,6 +1818,128 @@ const tableC = workshopList.map((w) => ({
         <button style = {{backgroundColor: "#5fc468"}}className="pdf-btn" onClick={generatePDF}>Download PDF Report</button>
       </div>
 
+      {/* ========================================================= */}
+{/* ================= STICKY SUMMARY WIDGET ================= */}
+{/* ========================================================= */}
+<div style={{
+  position: "fixed",
+  bottom: "24px",
+  right: "24px",
+  width: "260px",
+  background: "#fff",
+  border: "1.5px solid #b2d8b2",
+  borderRadius: "10px",
+  boxShadow: "0 4px 18px rgba(0,0,0,0.13)",
+  zIndex: 1000,
+  overflow: "hidden",
+  fontFamily: "inherit",
+}}>
+  {/* Header */}
+  <div style={{
+    background: "#2c3e50",
+    color: "#fff",
+    padding: "10px 14px",
+    fontWeight: "700",
+    fontSize: "13px",
+    letterSpacing: "0.5px",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  }}>
+    📊 Live Configuration Summary
+  </div>
+
+  {/* Body */}
+  <div style={{ padding: "10px 14px", fontSize: "13px" }}>
+
+    {/* ── RPeak Section ── */}
+    <div style={{ marginBottom: "10px" }}>
+      <div style={{ fontWeight: "700", color: "#1976d2", marginBottom: "5px", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.4px" }}>
+        ⚡ Performance (RPeak)
+      </div>
+      {dynamicRpeak.map((row, idx) => {
+        const total = row.val * row.qty;
+        return (
+          <div key={idx} style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px", color: total > 0 ? "#222" : "#bbb" }}>
+            <span style={{ fontSize: "12px", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {row.label}
+            </span>
+            <span style={{ fontSize: "12px", fontWeight: total > 0 ? "600" : "normal" }}>
+              {total > 0 ? `${total.toFixed(2)} TF` : "—"}
+            </span>
+          </div>
+        );
+      })}
+      <div style={{ borderTop: "1.5px solid #1976d2", marginTop: "6px", paddingTop: "5px", display: "flex", justifyContent: "space-between" }}>
+        <span style={{ fontWeight: "700", color: "#1976d2", fontSize: "12px" }}>Total RPeak</span>
+        <span style={{ fontWeight: "700", color: "#1976d2", fontSize: "12px" }}>
+          {(() => {
+            const total = dynamicRpeak.reduce((sum, row) => sum + row.val * row.qty, 0);
+            return total >= 1000
+              ? `${(total / 1000).toFixed(2)} PF`
+              : `${total.toFixed(2)} TF`;
+          })()}
+        </span>
+      </div>
+    </div>
+
+    {/* Divider */}
+    <div style={{ borderTop: "1px dashed #ddd", margin: "8px 0" }} />
+
+    {/* ── Budget Section ── */}
+    <div>
+      <div style={{ fontWeight: "700", color: "#1a5c1a", marginBottom: "5px", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.4px" }}>
+        💰 Budget Breakdown
+      </div>
+
+      {/* Hardware */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+        <span style={{ fontSize: "12px", color: "#555" }}>Hardware (A)</span>
+        <span style={{ fontSize: "12px", fontWeight: hardwareTotal_INR > 0 ? "600" : "normal", color: hardwareTotal_INR > 0 ? "#222" : "#bbb" }}>
+          {hardwareTotal_INR > 0 ? `₹${hardwareTotal_INR.toLocaleString("en-IN")}` : "—"}
+        </span>
+      </div>
+
+      {/* Software Services */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+        <span style={{ fontSize: "12px", color: "#555" }}>Software (B)</span>
+        <span style={{ fontSize: "12px", fontWeight: totalB_INR > 0 ? "600" : "normal", color: totalB_INR > 0 ? "#222" : "#bbb" }}>
+          {totalB_INR > 0 ? `₹${totalB_INR.toLocaleString("en-IN")}` : "—"}
+        </span>
+      </div>
+
+      {/* Add-on Services */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+        <span style={{ fontSize: "12px", color: "#555" }}>Add-ons (C)</span>
+        <span style={{ fontSize: "12px", fontWeight: totalC_INR > 0 ? "600" : "normal", color: totalC_INR > 0 ? "#222" : "#bbb" }}>
+          {totalC_INR > 0 ? `₹${totalC_INR.toLocaleString("en-IN")}` : "—"}
+        </span>
+      </div>
+
+      {/* Grand Total INR */}
+      <div style={{ borderTop: "1.5px solid #1a5c1a", paddingTop: "5px", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+        <span style={{ fontWeight: "700", color: "#1a5c1a", fontSize: "12px" }}>Grand Total</span>
+        <span style={{ fontWeight: "700", color: "#1a5c1a", fontSize: "12px" }}>
+          {grandTotal_INR > 0 ? `₹${grandTotal_INR.toLocaleString("en-IN")}` : "—"}
+        </span>
+      </div>
+
+      {/* Grand Total USD */}
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <span style={{ fontSize: "11px", color: "#888" }}>≈ USD @ ₹{usdRate}</span>
+        <span style={{ fontSize: "11px", color: "#888", fontWeight: "600" }}>
+          {grandTotal_USD > 0 ? `$${grandTotal_USD.toLocaleString("en-US")}` : "—"}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  {/* Footer hint */}
+  <div style={{ background: "#f5f5f5", borderTop: "1px solid #eee", padding: "6px 14px", fontSize: "10px", color: "#999", textAlign: "center" }}>
+    Updates live as you configure ↑
+  </div>
+</div>
+
     </div>
   );
 }

@@ -1,66 +1,77 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useContext } from "react";
-
 import { AuthContext } from "./context/AuthContext.jsx";
 
-// Components
 import Navbar from "./components/Navbar.jsx";
 import Register from "./components/Register.jsx";
 import Login from "./components/Login.jsx";
-
 import PPMSDashboard from "./pages/PPMSDashboard.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
-
 
 // ================= PROTECTED ROUTE =================
 const ProtectedRoute = ({ children }) => {
   const { token } = useContext(AuthContext);
-
-  if (!token) {
-    return <Navigate to="/login" replace />;
-  }
-
+  const effectiveToken = token || localStorage.getItem("token");
+  if (!effectiveToken) return <Navigate to="/login" replace />;
   return children;
 };
-
 
 // ================= ADMIN ROUTE =================
 const AdminRoute = ({ children }) => {
   const { token, role } = useContext(AuthContext);
 
-  if (!token) {
-    return <Navigate to="/login" replace />;
-  }
+  // ✅ Fallback to localStorage in case context hasn't updated yet
+  const effectiveToken = token || localStorage.getItem("token");
+  const effectiveRole  = role  || localStorage.getItem("role");
 
-  if (role !== "ADMIN") {
-    return <Navigate to="/dashboard" replace />;
-  }
+  if (!effectiveToken) return <Navigate to="/login" replace />;
+  if (effectiveRole !== "ADMIN") return <Navigate to="/dashboard" replace />;
 
   return children;
 };
 
-
 function App() {
+  const { token, role } = useContext(AuthContext);
+  const location = useLocation();
 
-  const { token } = useContext(AuthContext);
+  // ✅ Also fallback to localStorage for navbar visibility
+  const effectiveToken = token || localStorage.getItem("token");
+  const effectiveRole  = role  || localStorage.getItem("role");
+
+  const hideNavbarOn = ["/login", "/register"];
+  const showNavbar = effectiveToken && !hideNavbarOn.includes(location.pathname);
 
   return (
     <>
-      {token && <Navbar />}
+      {showNavbar && <Navbar />}
 
       <div className="container">
-
         <Routes>
 
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
+          {/* PUBLIC ROUTES — redirect to correct dashboard if already logged in */}
+          <Route
+            path="/login"
+            element={
+              effectiveToken
+                ? <Navigate to={effectiveRole === "ADMIN" ? "/admin" : "/dashboard"} replace />
+                : <Login />
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              effectiveToken
+                ? <Navigate to={effectiveRole === "ADMIN" ? "/admin" : "/dashboard"} replace />
+                : <Register />
+            }
+          />
 
           {/* USER DASHBOARD */}
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <PPMSDashboard />
+                <PPMSDashboard isAdmin={false} />
               </ProtectedRoute>
             }
           />
@@ -75,10 +86,13 @@ function App() {
             }
           />
 
+          {/* DEFAULT */}
           <Route path="/" element={<Navigate to="/login" replace />} />
 
-        </Routes>
+          {/* 404 CATCH-ALL */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
 
+        </Routes>
       </div>
     </>
   );
