@@ -7,6 +7,9 @@ import Register from "./components/Register.jsx";
 import Login from "./components/Login.jsx";
 import PPMSDashboard from "./pages/PPMSDashboard.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
+import About from "./pages/About.jsx";
+import Contact from "./pages/Contact.jsx";
+import Profile from "./pages/Profile.jsx";
 
 // ================= PROTECTED ROUTE =================
 const ProtectedRoute = ({ children }) => {
@@ -83,6 +86,36 @@ function App() {
               <AdminRoute>
                 <AdminDashboard />
               </AdminRoute>
+            }
+          />
+
+          {/* ABOUT */}
+          <Route
+            path="/about"
+            element={
+              <ProtectedRoute>
+                <About />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* CONTACT */}
+          <Route
+            path="/contact"
+            element={
+              <ProtectedRoute>
+                <Contact />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* PROFILE */}
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
             }
           />
 
